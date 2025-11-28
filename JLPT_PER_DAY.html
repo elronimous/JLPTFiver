@@ -1,0 +1,1514 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>JLPT Grammar Daily Scheduler</title>
+  <style>
+    :root {
+      --accent: #38bdf8;
+      --text-main: #e5e7eb;
+      --text-muted: #9ca3af;
+      --font-main: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      --control-bg: #0b1120;
+      --control-border: #1e293b;
+      --shadow-soft: 0 18px 40px rgba(0,0,0,0.55);
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin:0; padding:0;
+      font-family: var(--font-main);
+      background: radial-gradient(circle at top, #1e293b 0%, #020617 55%, #000 100%);
+      color: var(--text-main);
+      min-height: 100vh;
+    }
+    .page {
+      max-width: 960px;
+      margin: 0 auto;
+      padding: 1.5rem 1.25rem 3rem;
+    }
+
+    .header-bar {
+      position: sticky;
+      top: 0;
+      z-index: 10;
+      margin: -1.5rem -1.25rem 1.1rem;
+      padding: 0.9rem 1.25rem 0.8rem;
+      background: rgba(15,23,42,0.94);
+      backdrop-filter: blur(18px);
+      border-bottom: 1px solid rgba(148,163,184,0.25);
+      box-shadow: 0 14px 35px rgba(0,0,0,0.75);
+      display: flex;
+      flex-direction: column;
+      gap: 0.7rem;
+    }
+    .header-top {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 1rem;
+    }
+    .header-title {
+      display: flex;
+      align-items: baseline;
+      gap: 0.4rem;
+    }
+    .header-title-main {
+      font-size: 1.25rem;
+      font-weight: 650;
+      letter-spacing: 0.03em;
+      text-transform: uppercase;
+    }
+    .header-title-pill {
+      font-size: 0.75rem;
+      text-transform: uppercase;
+      letter-spacing: 0.14em;
+      padding: 0.1rem 0.7rem;
+      border-radius: 999px;
+      border: 1px solid rgba(56,189,248,0.7);
+      color: #7dd3fc;
+      background: radial-gradient(circle at top, rgba(56,189,248,0.18), transparent 60%);
+    }
+    .date-controls {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      justify-content: flex-end;
+      gap: 0.4rem;
+    }
+    .chip-btn {
+      border-radius: 999px;
+      border: 1px solid rgba(148,163,184,0.65);
+      background: radial-gradient(circle at top, #1d283a 0%, #020617 65%);
+      color: var(--text-main);
+      font-size: 0.72rem;
+      padding: 0.25rem 0.8rem;
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      gap: 0.25rem;
+      transition: all 0.15s ease;
+    }
+    .chip-btn.primary {
+      border-color: var(--accent);
+      color: #e0f2fe;
+    }
+    .chip-btn.icon-only {
+      padding-inline: 0.4rem;
+      width: 1.8rem;
+      justify-content: center;
+    }
+    .chip-btn:hover {
+      border-color: var(--accent);
+      background: radial-gradient(circle at top, #0f172a 0%, #020617 65%);
+      transform: translateY(-0.5px);
+    }
+    .hidden-date-input {
+      position: absolute;
+      opacity: 0;
+      pointer-events: none;
+      width: 0;
+      height: 0;
+    }
+
+    .level-filter-row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.35rem;
+      margin-top: 0.1rem;
+      user-select: none;
+    }
+    .level-filter-btn {
+      border-radius: 999px;
+      border: 1px solid transparent;
+      padding: 0.18rem 0.7rem;
+      font-size: 0.7rem;
+      text-transform: uppercase;
+      letter-spacing: 0.12em;
+      cursor: pointer;
+      color: #0f172a;
+      font-weight: 600;
+      transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+    }
+    .level-filter-btn.ALL { background: linear-gradient(135deg, #e5e7eb, #9ca3af); }
+    .level-filter-btn.N5  { background: linear-gradient(135deg, #bbf7d0, #22c55e); }
+    .level-filter-btn.N4  { background: linear-gradient(135deg, #bfdbfe, #3b82f6); }
+    .level-filter-btn.N3  { background: linear-gradient(135deg, #fed7aa, #f97316); }
+    .level-filter-btn.N2  { background: linear-gradient(135deg, #fecaca, #ef4444); }
+    .level-filter-btn.N1  { background: linear-gradient(135deg, #e9d5ff, #a855f7); }
+
+    .level-filter-btn:not(.active) {
+      background: transparent !important;
+      color: var(--text-main);
+      border-color: rgba(148,163,184,0.8);
+      opacity: 0.6;
+      transform: scale(0.95);
+    }
+    .level-filter-btn.active {
+      box-shadow: 0 0 0 1px rgba(15,23,42,0.7), 0 0 20px rgba(0,0,0,0.45);
+      transform: translateY(-1px) scale(1.05);
+      border-color: rgba(15,23,42,0.9);
+      opacity: 1;
+    }
+
+    .panel {
+      background: radial-gradient(circle at top left, rgba(15,23,42,0.9) 0%, rgba(15,23,42,0.96) 40%, #020617 100%);
+      border-radius: 1.25rem;
+      padding: 1.1rem 1.4rem 1.4rem;
+      box-shadow: var(--shadow-soft);
+      border: 1px solid rgba(15,23,42,0.95);
+    }
+    .meta-row {
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: space-between;
+      gap: 0.5rem;
+      font-size: 0.75rem;
+      color: var(--text-muted);
+      margin-bottom: 0.8rem;
+    }
+    .meta-label {
+      text-transform: uppercase;
+      letter-spacing: 0.12em;
+      font-size: 0.7rem;
+      color: #9ca3af;
+    }
+    .meta-value { color: #e5e7eb; }
+
+    .level-section {
+      margin-bottom: 1.2rem;
+      border-radius: 0.9rem;
+      overflow: hidden;
+      background: rgba(30, 41, 59, 0.8);
+      border: 1px solid rgba(148,163,184,0.3);
+    }
+
+    .level-N5 { border-color: rgba(34, 197, 94, 0.6); }
+    .level-N4 { border-color: rgba(59, 130, 246, 0.6); }
+    .level-N3 { border-color: rgba(249, 115, 22, 0.7); }
+    .level-N2 { border-color: rgba(239, 68, 68, 0.7); }
+    .level-N1 { border-color: rgba(168, 85, 247, 0.7); }
+
+    .level-heading {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      cursor: pointer;
+      padding: 0.9rem 1.2rem;
+      background: linear-gradient(90deg, rgba(15,23,42,0.95), rgba(30,41,59,0.8));
+      border: none;
+      font-size: 0.9rem;
+      color: var(--text-main);
+      font-weight: 700;
+      gap: 1rem;
+      transition: background 0.3s ease;
+    }
+    .level-heading:hover {
+      background: linear-gradient(90deg, rgba(25,40,65,1), rgba(35,47,70,0.9));
+    }
+
+    .level-left {
+      display: flex;
+      align-items: center;
+      gap: 0.6rem;
+    }
+    .level-pill {
+      width: 1.6rem;
+      height: 1.6rem;
+      border-radius: 999px;
+      border: 2px solid rgba(15,23,42,0.9);
+      box-shadow: 0 0 0 1px rgba(15,23,42,0.8);
+      transition: background 0.3s ease;
+      flex-shrink: 0;
+    }
+    .level-N5 .level-pill { background: linear-gradient(135deg, #bbf7d0, #22c55e); }
+    .level-N4 .level-pill { background: linear-gradient(135deg, #bfdbfe, #3b82f6); }
+    .level-N3 .level-pill { background: linear-gradient(135deg, #fed7aa, #f97316); }
+    .level-N2 .level-pill { background: linear-gradient(135deg, #fecaca, #ef4444); }
+    .level-N1 .level-pill { background: linear-gradient(135deg, #e9d5ff, #a855f7); }
+
+    .level-title {
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+    }
+    .level-count {
+      font-size: 0.8rem;
+      color: var(--text-muted);
+      font-weight: 500;
+      user-select: none;
+    }
+
+    .level-body {
+      max-height: 0;
+      overflow: hidden;
+      transition: max-height 0.4s cubic-bezier(0.4,0,0.2,1), padding 0.2s ease;
+      padding: 0 1.2rem;
+    }
+    .level-body.expanded {
+      max-height: 1200px;
+      padding: 1rem 1.2rem 1.2rem;
+    }
+
+    .grammar-item {
+      border-radius: 0.75rem;
+      padding: 0.8rem 1rem;
+      margin-bottom: 0.6rem;
+      background: linear-gradient(135deg, rgba(20,24,36,0.9), rgba(15,23,42,0.95));
+      border: 1px solid rgba(30,64,175,0.4);
+      display: grid;
+      grid-template-columns: minmax(0, 1.4fr) minmax(0, 2fr);
+      column-gap: 1rem;
+      row-gap: 0.3rem;
+      font-size: 0.9rem;
+      transition: all 0.2s ease;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.2);
+    }
+    .grammar-item:hover {
+      transform: translateY(-1px);
+      box-shadow: 0 4px 16px rgba(56,189,248,0.3);
+      border-color: rgba(56,189,248,0.6);
+    }
+    .grammar-main {
+      font-weight: 800;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      font-size: 1em;
+      display: flex;
+      align-items: center;
+      gap: 0.4rem;
+    }
+    .grammar-main a {
+      color: inherit;
+      text-decoration: none;
+    }
+    .grammar-main a:hover {
+      text-decoration: underline;
+      color: var(--accent);
+    }
+    .extra-link {
+      width: 1rem;
+      height: 1rem;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      color: var(--accent);
+      opacity: 0.8;
+      flex-shrink: 0;
+      text-decoration: none;
+    }
+    .extra-link:hover {
+      opacity: 1;
+    }
+    .grammar-romaji {
+      font-size: 0.85em;
+      color: #a5b4fc;
+      opacity: 0.95;
+      font-style: italic;
+    }
+    .grammar-meaning {
+      font-size: 0.9em;
+      color: #e5e7eb;
+      line-height: 1.4;
+    }
+
+    .empty-note {
+      margin-top: 1rem;
+      font-size: 0.9rem;
+      color: #f97316;
+      text-align: center;
+      padding: 2.5rem;
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      * { transition: none !important; animation: none !important; }
+    }
+  </style>
+</head>
+<body>
+  <div class="page">
+    <header class="header-bar">
+      <div class="header-top">
+        <div class="header-title">
+          <div class="header-title-main">Daily JLPT Grammar</div>
+          <div class="header-title-pill">五つでもやろう～！</div>
+        </div>
+        <div class="date-controls">
+          <button id="prevDayBtn" class="chip-btn">◀ Yesterday</button>
+          <button id="todayBtn" class="chip-btn primary">● Today</button>
+          <button id="nextDayBtn" class="chip-btn">▶ Tomorrow</button>
+          <input type="date" id="viewDate" class="hidden-date-input" />
+          <button id="openCalendarBtn" class="chip-btn icon-only" title="Select date">📅</button>
+        </div>
+      </div>
+      <div class="level-filter-row">
+        <button class="level-filter-btn ALL active" data-level="ALL">All</button>
+        <button class="level-filter-btn N5 active" data-level="N5">N5</button>
+        <button class="level-filter-btn N4 active" data-level="N4">N4</button>
+        <button class="level-filter-btn N3 active" data-level="N3">N3</button>
+        <button class="level-filter-btn N2 active" data-level="N2">N2</button>
+        <button class="level-filter-btn N1 active" data-level="N1">N1</button>
+      </div>
+    </header>
+
+    <main class="panel">
+      <div class="meta-row">
+        <div><span class="meta-label">View</span> <span class="meta-value" id="infoDate"></span></div>
+        <div><span class="meta-label">Per level</span> <span class="meta-value">5 items</span></div>
+      </div>
+      <div id="output"></div>
+    </main>
+  </div>
+
+  <template id="csvData">
+N5,1,だ,da,"To be, Is",https://bunpro.jp/grammar_points/%E3%81%A0
+N5,2,です,desu,"To be, Is",https://bunpro.jp/grammar_points/%E3%81%A7%E3%81%99
+N5,3,は,wa,As for... (Highlights sentence topic),https://bunpro.jp/grammar_points/%E3%81%AF
+N5,4,も,mo,"Also, Too, As well, Even, Either, Neither",https://bunpro.jp/grammar_points/%E3%82%82
+N5,5,これ,kore,This,https://bunpro.jp/grammar_points/%E3%81%93%E3%82%8C
+N5,6,それ,sore,That,https://bunpro.jp/grammar_points/%E3%81%9D%E3%82%8C
+N5,7,あれ,are,That (over there),https://bunpro.jp/grammar_points/%E3%81%82%E3%82%8C
+N5,8,の,no,Indicates possession,https://bunpro.jp/grammar_points/%E3%81%AE
+N5,9,いい,ii,い-Adjective meaning 'good',https://bunpro.jp/grammar_points/%E3%81%84%E3%81%84
+N5,10,い-Adjectives,i-adjectives,Adjectives ending in い,https://bunpro.jp/grammar_points/%E3%81%84-adjectives
+N5,11,な-Adjectives,na-adjectives,Adjectives that are also nouns,https://bunpro.jp/grammar_points/%E3%81%AA-adjectives
+N5,12,か,ka,Question marking particle,https://bunpro.jp/grammar_points/%E3%81%8B
+N5,13,が,ga,"Subject marking particle, Identification particle",https://bunpro.jp/grammar_points/%E3%81%8C
+N5,14,よ,yo,Emphasis (Sentence ending particle),https://bunpro.jp/grammar_points/%E3%82%88
+N5,15,ね,ne,"Isn't it?, Right? (Sentence ending particle)",https://bunpro.jp/grammar_points/%E3%81%AD
+N5,16,る-Verb (Dictionary),ru-verb (dictionary),る + ます (Ichidan Verbs),https://bunpro.jp/grammar_points/%E3%82%8B-Verbs
+N5,17,う-Verb (Dictionary),u-verb (dictionary),う + ます (Godan Verbs),https://bunpro.jp/grammar_points/%E3%81%86-Verbs
+N5,18,を,o,Object marking particle,https://bunpro.jp/grammar_points/%E3%82%92
+N5,19,る-Verb (Negative),ru-verb (negative),Will/Does/Do (not),https://bunpro.jp/grammar_points/%E3%82%8Bverb-%E3%81%AA%E3%81%84
+N5,20,う-Verb (Negative),u-verb (negative),Will/Does/Do (not),https://bunpro.jp/grammar_points/%E3%81%86verb--%E3%81%AA%E3%81%84
+N5,21,と,to,And,https://bunpro.jp/grammar_points/%E3%81%A8-and
+N5,22,ここ,koko,"Here, This place",https://bunpro.jp/grammar_points/%E3%81%93%E3%81%93
+N5,23,そこ,soko,"There, That place",https://bunpro.jp/grammar_points/%E3%81%9D%E3%81%93
+N5,24,あそこ,asoko,Over there,https://bunpro.jp/grammar_points/%E3%81%82%E3%81%9D%E3%81%93
+N5,25,で,de,"At, In",https://bunpro.jp/grammar_points/%E3%81%A7
+N5,26,に,ni,"In, At, To, For, On",https://bunpro.jp/grammar_points/%E3%81%AB
+N5,27,か,ka,Or,https://bunpro.jp/grammar_points/%E3%81%8B-or
+N5,28,と,to,With,https://bunpro.jp/grammar_points/%E3%81%A8-with
+N5,29,でしょう,deshou,"Right?, Probably, Isn't it?",https://bunpro.jp/grammar_points/%E3%81%A7%E3%81%97%E3%82%87%E3%81%86
+N5,30,だろう,darou,"Right?, Probably, Isn't it?",https://bunpro.jp/grammar_points/%E3%81%A0%E3%82%8D%E3%81%86
+N5,31,がある,ga aru,"To be, There is",https://bunpro.jp/grammar_points/%E3%81%8C%E3%81%82%E3%82%8B
+N5,32,がいる,ga iru,"To be, There is, To remain (in a state)",https://bunpro.jp/grammar_points/%E3%81%8C%E3%81%84%E3%82%8B
+N5,33,この,kono,This,https://bunpro.jp/grammar_points/%E3%81%93%E3%81%AE
+N5,34,その,sono,That,https://bunpro.jp/grammar_points/%E3%81%9D%E3%81%AE
+N5,35,あの,ano,That (over there),https://bunpro.jp/grammar_points/%E3%81%82%E3%81%AE
+N5,36,～んです・のです,~n desu / no desu,"Explanatory, Emphasis, The fact is",https://bunpro.jp/grammar_points/-%E3%82%93%E3%81%A7%E3%81%99-%E3%81%AE%E3%81%A7%E3%81%99
+N5,37,い-Adjective (Past),i-adjective (past),"Was, Were (Past tense)",https://bunpro.jp/grammar_points/past-tense-%E3%81%84-adjectives
+N5,38,の,no,"Verb nominalizer, The one who..., That which...",https://bunpro.jp/grammar_points/%E3%81%AE%E3%81%AF
+N5,39,い-Adjective + Noun,i-adjective + noun,Describing a noun,https://bunpro.jp/grammar_points/%E3%81%84-adjective-noun
+N5,40,な-Adjective + Noun,na-adjective + noun,Describing a noun,https://bunpro.jp/grammar_points/%E3%81%AA-adjective-noun
+N5,41,へいく,e iku,"To go to, To head toward",https://bunpro.jp/grammar_points/%E3%81%B8%E3%81%84%E3%81%8F
+N5,42,する,suru,"To do, To make into",https://bunpro.jp/grammar_points/%E3%81%99%E3%82%8B
+N5,43,くる,kuru,To come,https://bunpro.jp/grammar_points/%E3%81%8F%E3%82%8B
+N5,44,る-Verb (Past),ru-verb (past),る - Verbs (Past tense),https://bunpro.jp/grammar_points/%E3%82%8B-verb-past
+N5,45,う-Verb (Past),u-verb (past),う - Verbs (Past tense),https://bunpro.jp/grammar_points/%E3%81%86-verb-past
+N5,46,好き,suki,"Like, Fond of",https://bunpro.jp/grammar_points/%E3%81%99%E3%81%8D
+N5,47,きらい,kirai,"Dislike, Not fond of",https://bunpro.jp/grammar_points/%E3%81%8D%E3%82%89%E3%81%84
+N5,48,のがすき,no ga suki,"Like doing, Love doing",https://bunpro.jp/grammar_points/%E3%81%AE%E3%81%8C%E3%81%99%E3%81%8D
+N5,49,がある + Noun,ga aru + noun,"Noun (B) that has Noun (A), Noun (B) with Noun (A)",https://bunpro.jp/grammar_points/%E3%81%8C%E3%81%82%E3%82%8B-noun
+N5,50,い-Adjectives くない,i-adjectives kunai,Not (Adjective),https://bunpro.jp/grammar_points/negative-%E3%81%84-adjectives
+N5,51,で,de,"With, By (using)",https://bunpro.jp/grammar_points/%E3%81%A7-by
+N5,52,ので,node,"Because, So, Since, The reason being",https://bunpro.jp/grammar_points/%E3%81%AE%E3%81%A7
+N5,53,から,kara,"Because, Since",https://bunpro.jp/grammar_points/%E3%81%8B%E3%82%89-because
+N5,54,から,kara,From,https://bunpro.jp/grammar_points/%E3%81%8B%E3%82%89
+N5,55,けど・だけど,kedo / dakedo,"But, However",https://bunpro.jp/grammar_points/%E3%81%91%E3%81%A9-%E3%81%A0%E3%81%91%E3%81%A9
+N5,56,が,ga,"But, However",https://bunpro.jp/grammar_points/%E3%81%8C-but
+N5,57,る-Verb (Negative-Past),ru-verb (negative-past),る - Verbs (Negative-past tense),https://bunpro.jp/grammar_points/%E3%82%8B-verb-neg-past
+N5,58,う-Verb (Negative-Past),u-verb (negative-past),う - Verbs (Negative-past tense),https://bunpro.jp/grammar_points/%E3%81%86-verb-neg-past
+N5,59,Verb + て,verb + te,"And, Then (Linking events)",https://bunpro.jp/grammar_points/verb-%E3%81%A6
+N5,60,ている①,te iru (1),"Is, Am, Are (~ing)",https://bunpro.jp/grammar_points/%E3%81%A6%E3%81%84%E3%82%8B1
+N5,61,へ,e,"To, Toward",https://bunpro.jp/grammar_points/%E3%81%B8
+N5,62,Verb + にいく,verb + ni iku,"To go ~, To go in order to ~",https://bunpro.jp/grammar_points/verb-%E3%81%AB%E3%81%84%E3%81%8F
+N5,63,誰,dare,Who,https://bunpro.jp/grammar_points/%E3%81%A0%E3%82%8C
+N5,64,い-Adjective (Predicate),i-adjective (predicate),い-Adjective (Predicate),https://bunpro.jp/grammar_points/%E3%81%84-adjective-predicate
+N5,65,な-Adjective だ,na-adjective da,な-Adjective (Predicate),https://bunpro.jp/grammar_points/%E3%81%AA-adjective-predicate
+N5,66,だった・でした,datta / deshita,"Was, Were (Past tense)",https://bunpro.jp/grammar_points/%E3%81%A0%E3%81%A3%E3%81%9F-%E3%81%A7%E3%81%97%E3%81%9F
+N5,67,じゃない,janai,"Is not, Isn't",https://bunpro.jp/grammar_points/%E3%81%98%E3%82%83%E3%81%AA%E3%81%84
+N5,68,じゃなかった,janakatta,"Was not, Wasn't",https://bunpro.jp/grammar_points/%E3%81%98%E3%82%83%E3%81%AA%E3%81%8B%E3%81%A3%E3%81%9F
+N5,69,い-Adjective くなかった,i-adjective kunakatta,"Was not, Wasn't (Adjective)",https://bunpro.jp/grammar_points/%E3%81%84-Adjective-%E3%81%8F%E3%81%AA%E3%81%8B%E3%81%A3%E3%81%9F
+N5,70,と,to,Quotation,https://bunpro.jp/grammar_points/%E3%81%A8
+N5,71,って,tte,Casual quotation,https://bunpro.jp/grammar_points/%E3%81%A3%E3%81%A6
+N5,72,Verbs (Non-past),verbs (non-past),(Non-past),https://bunpro.jp/grammar_points/verb-non-past
+N5,73,Verb［た・ている］+ Noun,verb [ta / te iru] + noun,"Verb modified noun, Relative clause",https://bunpro.jp/grammar_points/verb-%E3%81%9F-noun
+N5,74,の,no,Possessive use (Noun omission),https://bunpro.jp/grammar_points/%E3%81%AE-noun-ommission
+N5,75,な,na,"Do not, Don't (Prohibitive)",https://bunpro.jp/grammar_points/%E3%81%AA
+N5,76,だけ,dake,"Only, Just",https://bunpro.jp/grammar_points/%E3%81%A0%E3%81%91
+N5,77,どれ,dore,Which (of three or more),https://bunpro.jp/grammar_points/%E3%81%A9%E3%82%8C
+N5,78,どこ,doko,Where,https://bunpro.jp/grammar_points/%E3%81%A9%E3%81%93
+N5,79,どの,dono,"Which (of three or more), What (kind)",https://bunpro.jp/grammar_points/%E3%81%A9%E3%81%AE
+N5,80,ている②,te iru (2),"State of being, Has (have) done",https://bunpro.jp/grammar_points/%E3%81%A6%E3%81%84%E3%82%8B2
+N5,81,てから,tekara,"Once...is done, Once...happens, After doing",https://bunpro.jp/grammar_points/%E3%81%A6%E3%81%8B%E3%82%89
+N5,82,Verb + て+ B,verb + te + B,"And, And then, After that (sequence)",https://bunpro.jp/grammar_points/verb-%E3%81%A6-b
+N5,83,もう,mou,"Already, Anymore",https://bunpro.jp/grammar_points/%E3%82%82%E3%81%86
+N5,84,まだ,mada,"Still, Not yet",https://bunpro.jp/grammar_points/%E3%81%BE%E3%81%A0
+N5,85,まだ～ていません,mada ~te imasen,Still haven't done (something),https://bunpro.jp/grammar_points/%E3%81%BE%E3%81%A0-%E3%81%A6%E3%81%84%E3%81%BE%E3%81%9B%E3%82%93
+N5,86,てもいい,temo ii,"It is alright/fine/okay even if, Can/may, ~ is also okay",https://bunpro.jp/grammar_points/%E3%81%A6%E3%82%82%E3%81%84%E3%81%84
+N5,87,たい,tai,Want to do,https://bunpro.jp/grammar_points/%E3%81%9F%E3%81%84
+N5,88,たり～たりする,tari ~ tari suru,Things like ~ and ~,https://bunpro.jp/grammar_points/%E3%81%9F%E3%82%8A-%E3%81%9F%E3%82%8A%E3%81%99%E3%82%8B
+N5,89,けっこう,kekkou,"Quite, A lot, Fairly, Rather",https://bunpro.jp/grammar_points/%E3%81%91%E3%81%A3%E3%81%93%E3%81%86
+N5,90,たくさん,takusan,"Many, A lot of, Plenty, Enough",https://bunpro.jp/grammar_points/%E3%81%9F%E3%81%8F%E3%81%95%E3%82%93
+N5,91,まえに,mae ni,"Before, In front of",https://bunpro.jp/grammar_points/%E3%81%BE%E3%81%88%E3%81%AB
+N5,92,くらい ①,kurai (1),"About, Approximately",https://bunpro.jp/grammar_points/%E3%81%8F%E3%82%89%E3%81%841
+N5,93,Noun + まで,noun + made,"Until, Till, To (but no further than)",https://bunpro.jp/grammar_points/noun-%E3%81%BE%E3%81%A7
+N5,94,Verb + まで,verb + made,Until (something) happens,https://bunpro.jp/grammar_points/v-%E3%81%BE%E3%81%A7
+N5,95,すぎる,sugiru,"Too much, Very",https://bunpro.jp/grammar_points/%E3%81%99%E3%81%8E%E3%82%8B
+N5,96,にする,ni suru,"To decide on, To choose, To make something into, To view something as",https://bunpro.jp/grammar_points/%E3%81%AB%E3%81%99%E3%82%8B
+N5,97,～になる・～くなる,~ni naru / ~ku naru,To become (Adjective),https://bunpro.jp/grammar_points/%E3%81%AB%E3%81%AA%E3%82%8B-%E3%81%8F%E3%81%AA%E3%82%8B
+N5,98,のなかで～がいちばん～,no naka de ~ ga ichiban ~,"Out of ~, ~ is the best/most ~",https://bunpro.jp/grammar_points/%E3%81%AE%E3%81%AA%E3%81%8B%E3%81%A7-%E3%81%8C%E3%81%84%E3%81%A1%E3%81%B0%E3%82%93
+N5,99,より～のほうが,yori ~ no hou ga,To be more ~ than ~,https://bunpro.jp/grammar_points/%E3%82%88%E3%82%8A-%E3%81%AE%E3%81%BB%E3%81%86%E3%81%8C
+N5,100,なにか・なにも,nanika / nanimo,"Something, Nothing, Anything, Not anything, Some kind of, Not any kind of",https://bunpro.jp/grammar_points/%E3%81%AA%E3%81%AB%E3%81%8B-%E3%81%AA%E3%81%AB%E3%82%82
+N5,101,誰か・どこか・誰も・どこも,dareka / dokoka / daremo / dokomo,"Someone, Somewhere, Not anyone, Not anywhere",https://bunpro.jp/grammar_points/%E8%AA%B0%E3%81%8B-%E3%81%A9%E3%81%93%E3%81%8B-%E8%AA%B0%E3%82%82-%E3%81%A9%E3%81%93%E3%82%82
+N5,102,ましょう,mashou,"Let's, Shall we (Polite volitional)",https://bunpro.jp/grammar_points/%E3%81%BE%E3%81%97%E3%82%87%E3%81%86
+N5,103,～ましょうか,~mashou ka,"Shall we, Shall I",https://bunpro.jp/grammar_points/%E3%81%BE%E3%81%97%E3%82%87%E3%81%86%E3%81%8B
+N5,104,ませんか,masen ka,"Won't you, Would you not, Why don't we",https://bunpro.jp/grammar_points/%E3%81%BE%E3%81%9B%E3%82%93%E3%81%8B
+N5,105,Verb + てもいい,verb + temo ii,"It's okay to, It's alright to, Can/may",https://bunpro.jp/grammar_points/verb-%E3%81%A6%E3%82%82%E3%81%84%E3%81%84
+N5,106,てください,te kudasai,Please do (Polite request),https://bunpro.jp/grammar_points/%E3%81%A6%E3%81%8F%E3%81%A0%E3%81%95%E3%81%84
+N5,107,ないでください,naide kudasai,Please don't (Polite request),https://bunpro.jp/grammar_points/%E3%81%AA%E3%81%84%E3%81%A7%E3%81%8F%E3%81%A0%E3%81%95%E3%81%84
+N5,108,てはいけない,te wa ikenai,"Must not, May not",https://bunpro.jp/grammar_points/%E3%81%A6%E3%81%AF%E3%81%84%E3%81%91%E3%81%AA%E3%81%84
+N5,109,なくてはいけない,nakute wa ikenai,"Must do, Have to do",https://bunpro.jp/grammar_points/%E3%81%AA%E3%81%8F%E3%81%A6%E3%81%AF%E3%81%84%E3%81%91%E3%81%AA%E3%81%84
+N5,110,なくてはならない,nakute wa naranai,"Must do, Have to do",https://bunpro.jp/grammar_points/%E3%81%AA%E3%81%8F%E3%81%A6%E3%81%AF%E3%81%AA%E3%82%89%E3%81%AA%E3%81%84
+N5,111,たほうがいい,ta hou ga ii,"It'd be better to, Should do",https://bunpro.jp/grammar_points/%E3%81%9F%E3%81%BB%E3%81%86%E3%81%8C%E3%81%84%E3%81%84
+N5,112,ないほうがいい,nai hou ga ii,"It'd be better not to, Shouldn't do",https://bunpro.jp/grammar_points/%E3%81%AA%E3%81%84%E3%81%BB%E3%81%86%E3%81%8C%E3%81%84%E3%81%84
+N5,113,なくちゃ・なきゃ,nakucha / nakya,"Must do, Have to do",https://bunpro.jp/grammar_points/%E3%81%AA%E3%81%8F%E3%81%A1%E3%82%83-%E3%81%AA%E3%81%8D%E3%82%83
+N5,114,や,ya,"Things like, And the like",https://bunpro.jp/grammar_points/%E3%82%84
+N5,115,たことがある,ta koto ga aru,Have done before,https://bunpro.jp/grammar_points/%E3%81%9F%E3%81%93%E3%81%A8%E3%81%8C%E3%81%82%E3%82%8B
+N5,116,ている③,te iru (3),"Has/have done, Is ~ing (Repetition)",https://bunpro.jp/grammar_points/%E3%81%A6%E3%81%84%E3%82%8B3
+N5,117,Adjective + て・Noun + で,adjective + te / noun + de,And... (Conjunctive),https://bunpro.jp/grammar_points/adjective-%E3%81%A6-noun-%E3%81%A7
+N5,118,Adjective + て + B,adjective + te + B,"And..., Both and (Conjunctive)",https://bunpro.jp/grammar_points/adjective-%E3%81%A6-b
+N5,119,のがへた,no ga heta,"To be bad at, Poor at, Unskillful",https://bunpro.jp/grammar_points/%E3%81%AE%E3%81%8C%E3%81%B8%E3%81%9F
+N5,120,のがじょうず,no ga jouzu,"To be good at, Proficient",https://bunpro.jp/grammar_points/%E3%81%AE%E3%81%8C%E3%81%98%E3%82%87%E3%81%86%E3%81%9A
+N5,121,Adjective + の(は),adjective + no (wa),"The 'one' that... (Indefinite pronoun, Adjective nominalization)",Adjective + の(は) (JLPT N5) | Bunpro
+N5,122,あげる,ageru,"To give (away), To present, To provide",https://bunpro.jp/grammar_points/%E3%81%82%E3%81%92%E3%82%8B
+N5,123,くれる,kureru,"To give (me), To be given",https://bunpro.jp/grammar_points/%E3%81%8F%E3%82%8C%E3%82%8B
+N5,124,もらう,morau,"To receive, To get, To obtain",https://bunpro.jp/grammar_points/%E3%82%82%E3%82%89%E3%81%86
+N5,125,けれども,keredomo,"But, Although",https://bunpro.jp/grammar_points/%E3%81%91%E3%82%8C%E3%81%A9%E3%82%82
+N5,126,つもりだ,tsumori da,"To plan to, To intend to",https://bunpro.jp/grammar_points/%E3%81%A4%E3%82%82%E3%82%8A%E3%81%A0
+N4,1,でも,demo,"Or something, Any... (with question words), No matter (who)",https://bunpro.jp/grammar_points/%E3%81%A7%E3%82%82
+N4,2,やすい,yasui,"Easy to, Likely to",https://bunpro.jp/grammar_points/%E3%82%84%E3%81%99%E3%81%84
+N4,3,にくい,nikui,"Difficult to, Hard to",https://bunpro.jp/grammar_points/%E3%81%AB%E3%81%8F%E3%81%84
+N4,4,だんだん,dandan,"Gradually, Little by little, Step by step",https://bunpro.jp/grammar_points/%E3%81%A0%E3%82%93%E3%81%A0%E3%82%93
+N4,5,どんどん,dondon,"Progressively, Rapidly increasing, More and more",https://bunpro.jp/grammar_points/%E3%81%A9%E3%82%93%E3%81%A9%E3%82%93
+N4,6,～ら,~ra,"We, Them, They, These, Those",https://bunpro.jp/grammar_points/%E3%82%89
+N4,7,ていく,te iku,"To ~ and go, To go on, To start",https://bunpro.jp/grammar_points/%E3%81%A6%E3%81%84%E3%81%8F
+N4,8,てくる,te kuru,"To come to, To become, To continue, To be starting to, Has been ~ing",https://bunpro.jp/grammar_points/%E3%81%A6%E3%81%8F%E3%82%8B
+N4,9,かた,kata,"Way of ~ing, How to ~, Manner of ~ing",https://bunpro.jp/grammar_points/%E3%81%8B%E3%81%9F
+N4,10,だけで,dake de,"Just by, Just with",https://bunpro.jp/grammar_points/%E3%81%A0%E3%81%91%E3%81%A7
+N4,11,だが・ですが,daga / desu ga,"But, Still, However, Nevertheless",https://bunpro.jp/grammar_points/%E3%81%A0%E3%81%8C%E3%83%BB%E3%81%A7%E3%81%99%E3%81%8C
+N4,12,なくて,nakute,"To not ~ and ~, Not ~ and ~ (Conjugations)",https://bunpro.jp/grammar_points/%E3%81%AA%E3%81%8F%E3%81%A6-conjunction
+N4,13,なくて,nakute,"Not ~ and, Not so, Because not (Examples)",https://bunpro.jp/grammar_points/%E3%81%AA%E3%81%8F%E3%81%A6
+N4,14,ないで,naide,"Without doing, Not ~ and ~",https://bunpro.jp/grammar_points/%E3%81%AA%E3%81%84%E3%81%A7
+N4,15,Verb［れる・られる］,verb [reru / rareru],"Was done to ~ by ~, Done without consent, Done to one's dismay",https://bunpro.jp/grammar_points/Verb%5Bpassive%5D
+N4,16,他動詞・自動詞,tadoushi / jidoushi,Done through action vs. occurring on its own,https://bunpro.jp/grammar_points/transitive-intransitive-verbs
+N4,17,なおす,naosu,"To do over, To redo",https://bunpro.jp/grammar_points/%E3%81%AA%E3%81%8A%E3%81%99
+N4,18,ということ,to iu koto,"~ing, The ~ that ~ (Nominalization)",https://bunpro.jp/grammar_points/%E3%81%A8%E3%81%84%E3%81%86%E3%81%93%E3%81%A8
+N4,19,とき,toki,"When, At the time of",https://bunpro.jp/grammar_points/%E3%81%A8%E3%81%8D
+N4,20,まず,mazu,"To start with, Firstly",https://bunpro.jp/grammar_points/%E3%81%BE%E3%81%9A
+N4,21,まで,made,"Even, To even, To the extent of",https://bunpro.jp/grammar_points/%E3%81%BE%E3%81%A7
+N4,22,までに,made ni,"By ~, By the time that ~, Before ~",https://bunpro.jp/grammar_points/%E3%81%BE%E3%81%A7%E3%81%AB
+N4,23,また,mata,"Also, As well, Moreover, Again, Additionally",https://bunpro.jp/grammar_points/%E3%81%BE%E3%81%9F
+N4,24,はじめる,hajimeru,"To start, To begin to",https://bunpro.jp/grammar_points/%E3%81%AF%E3%81%98%E3%82%81%E3%82%8B
+N4,25,おわる,owaru,"To finish, To end",https://bunpro.jp/grammar_points/%E3%81%8A%E3%82%8F%E3%82%8B
+N4,26,ごろ,goro,"Around, About",https://bunpro.jp/grammar_points/%E3%81%94%E3%82%8D
+N4,27,あとで,ato de,"After, Later",https://bunpro.jp/grammar_points/%E3%81%82%E3%81%A8%E3%81%A7
+N4,28,ていた,te ita,Was doing ~,https://bunpro.jp/grammar_points/%E3%81%A6%E3%81%84%E3%81%9F
+N4,29,に (Frequency),ni (frequency),"Times (In each time period), Every, Frequency of",https://bunpro.jp/grammar_points/%E3%81%AB-frequency
+N4,30,とうとう,toutou,"Finally, After all",https://bunpro.jp/grammar_points/%E3%81%A8%E3%81%86%E3%81%A8%E3%81%86
+N4,31,より,yori,"More than, Over",https://bunpro.jp/grammar_points/%E3%82%88%E3%82%8A
+N4,32,ごとに,gotoni,"Each, Every",https://bunpro.jp/grammar_points/%E3%81%94%E3%81%A8%E3%81%AB
+N4,33,なるべく,narubeku,"As ~ as possible, Wherever practicable",https://bunpro.jp/grammar_points/%E3%81%AA%E3%82%8B%E3%81%B9%E3%81%8F
+N4,34,るところだ,ru tokoro da,"About to, On the verge of",https://bunpro.jp/grammar_points/%E3%82%8B%E3%81%A8%E3%81%93%E3%82%8D%E3%81%A0
+N4,35,のに,noni,"Despite, Although, Even though",https://bunpro.jp/grammar_points/%E3%81%AE%E3%81%AB-despite
+N4,36,とおもう,to omou,I think,https://bunpro.jp/grammar_points/%E3%81%A8%E3%81%8A%E3%82%82%E3%81%86
+N4,37,など,nado,"Such as, Things like, Etc., And so on",https://bunpro.jp/grammar_points/%E3%81%AA%E3%81%A9
+N4,38,みたい,mitai,"Like, Similar to, Resembling",https://bunpro.jp/grammar_points/%E3%81%BF%E3%81%9F%E3%81%84
+N4,39,こと,koto,Converting a verb into a noun,https://bunpro.jp/grammar_points/%E3%81%93%E3%81%A8
+N4,40,そう,sou,"Look like, Appear, Seem, Have a feeling that",https://bunpro.jp/grammar_points/%E3%81%9D%E3%81%86
+N4,41,さ,sa,Converting adjectives to nouns,https://bunpro.jp/grammar_points/%E3%81%95
+N4,42,とか～とか,toka ~ toka,"Among other things, For example, Such as",https://bunpro.jp/grammar_points/%E3%81%A8%E3%81%8B-%E3%81%A8%E3%81%8B
+N4,43,そういう,sou iu,"Like that, Kind of",https://bunpro.jp/grammar_points/%E3%81%9D%E3%81%86%E3%81%84%E3%81%86
+N4,44,Verb[よう],verb [you],"Let's, I shall (Casual volitional)",https://bunpro.jp/grammar_points/%E3%82%88%E3%81%86-%E3%81%8A%E3%81%86
+N4,45,ようだ,you da,"It seems that, It appears that, It looks like",https://bunpro.jp/grammar_points/%E3%82%88%E3%81%86%E3%81%A0
+N4,46,ぜんぜん,zenzen,(Not) at all,https://bunpro.jp/grammar_points/%E3%81%9C%E3%82%93%E3%81%9C%E3%82%93
+N4,47,かな,kana,I wonder,https://bunpro.jp/grammar_points/%E3%81%8B%E3%81%AA
+N4,48,あまり～ない,amari ~ nai,"Not very, Not much, Not really, Hardly",https://bunpro.jp/grammar_points/%E3%81%82%E3%81%BE%E3%82%8A-%E3%81%AA%E3%81%84
+N4,49,ば,ba,"If… then, (Conditional)",https://bunpro.jp/grammar_points/%E3%81%B0
+N4,50,なら,nara,"Were it, If, If it's the case, As for (Conditional)",https://bunpro.jp/grammar_points/%E3%81%AA%E3%82%89
+N4,51,がる,garu,"To feel, To think, To act as if, To want, To desire",https://bunpro.jp/grammar_points/%E3%81%8C%E3%82%8B
+N4,52,がする,ga suru,"To give off, Smell, Sound, Taste, Sensation",https://bunpro.jp/grammar_points/%E3%81%8C%E3%81%99%E3%82%8B
+N4,53,たがる,tagaru,To want to (Third person),https://bunpro.jp/grammar_points/%E3%81%9F%E3%81%8C%E3%82%8B
+N4,54,かもしれない,kamoshirenai,"Might, Maybe, Probably",https://bunpro.jp/grammar_points/%E3%81%8B%E3%82%82%E3%81%97%E3%82%8C%E3%81%AA%E3%81%84
+N4,55,みたいに・みたいな,mitai ni / mitai na,"Like, Similar to, Resembling",https://bunpro.jp/grammar_points/%E3%81%BF%E3%81%9F%E3%81%84%E3%81%AB-%E3%81%BF%E3%81%9F%E3%81%84%E3%81%AA
+N4,56,そうに・そうな,sou ni / sou na,"Seem, Look like, Sound",https://bunpro.jp/grammar_points/%E3%81%9D%E3%81%86%E3%81%AB-%E3%81%9D%E3%81%86%E3%81%AA
+N4,57,のように・のような,no you ni / no you na,"Like (Noun), Similar to (Noun)",https://bunpro.jp/grammar_points/%E3%81%AE%E3%82%88%E3%81%86%E3%81%AB-%E3%81%AE%E3%82%88%E3%81%86%E3%81%AA
+N4,58,〜ようと思う・〜おうと思う,~you to omou / ~ou to omou,"I think I will, I think I shall, Going to, Gonna (Volitional + と思う)",https://bunpro.jp/grammar_points/%E3%82%88%E3%81%86%E3%81%A8%E6%80%9D%E3%81%86-%E3%81%8A%E3%81%86%E3%81%A8%E6%80%9D%E3%81%86
+N4,59,～にする・～くする,~ni suru / ~ku suru,"Adjective + する, To make something/someone (more)",https://bunpro.jp/grammar_points/%E3%81%AB%E3%81%99%E3%82%8B-%E3%81%8F%E3%81%99%E3%82%8B
+N4,60,といい,to ii,"I hope, I wish, You should, It would be good",https://bunpro.jp/grammar_points/%E3%81%A8%E3%81%84%E3%81%84
+N4,61,ようになる,you ni naru,"To reach the point that, To come to be that, To turn into",https://bunpro.jp/grammar_points/%E3%82%88%E3%81%86%E3%81%AB%E3%81%AA%E3%82%8B
+N4,62,まい～のように,mai ~ no you ni,"Almost every ~, Nearly every ~, On a ~ basis",https://bunpro.jp/grammar_points/%E3%81%BE%E3%81%84-%E3%81%AE%E3%82%88%E3%81%86%E3%81%AB
+N4,63,じゃないか,janaika,"Isn't it?, Is it not?",https://bunpro.jp/grammar_points/%E3%81%98%E3%82%83%E3%81%AA%E3%81%84%E3%81%8B
+N4,64,らしい ①,rashii (1),"Seems like, Apparently, I heard",https://bunpro.jp/grammar_points/%E3%82%89%E3%81%97%E3%81%841
+N4,65,ておく,te oku,To do something in advance,https://bunpro.jp/grammar_points/%E3%81%A6%E3%81%8A%E3%81%8F
+N4,66,がほしい,ga hoshii,"To want something, To be in need of",https://bunpro.jp/grammar_points/%E3%81%8C%E3%81%BB%E3%81%97%E3%81%84
+N4,67,てほしい,te hoshii,I want you to,https://bunpro.jp/grammar_points/%E3%81%A6%E3%81%BB%E3%81%97%E3%81%84
+N4,68,ときいた,to kiita,I heard that,https://bunpro.jp/grammar_points/%E3%81%A8%E3%81%8D%E3%81%84%E3%81%9F
+N4,69,聞こえる,kikoeru,"To be audible, To sound (like), (Can) hear, To be heard",https://bunpro.jp/grammar_points/%E8%81%9E%E3%81%93%E3%81%88%E3%82%8B
+N4,70,見える,mieru,"To be visible, To seem, To be in sight",https://bunpro.jp/grammar_points/%E8%A6%8B%E3%81%88%E3%82%8B
+N4,71,だす,dasu,"To suddenly begin, To start doing",https://bunpro.jp/grammar_points/%E3%81%A0%E3%81%99
+N4,72,～代,~dai,"Teens, Twenties, Thirties, 1910s, 20s/30s",https://bunpro.jp/grammar_points/%E4%BB%A3
+N4,73,Number + も,number + mo,"Emphasis, As ~ as, Not even",https://bunpro.jp/grammar_points/number-%E3%82%82
+N4,74,ほとんど,hotondo,"Almost all, Most, Hardly any, Few (Adverbial noun)",https://bunpro.jp/grammar_points/%E3%81%BB%E3%81%A8%E3%82%93%E3%81%A9
+N4,75,そんな・こんな・あんな・どんな,sonna / konna / anna / donna,"Such a・Kind of, Something like ~",https://bunpro.jp/grammar_points/%E3%81%9D%E3%82%93%E3%81%AA-%E3%81%93%E3%82%93%E3%81%AA-%E3%81%82%E3%82%93%E3%81%AA-%E3%81%A9%E3%82%93%E3%81%AA
+N4,76,各,kaku,"Each, Every, Respective, Various",https://bunpro.jp/grammar_points/%E5%90%84
+N4,77,以上 ①,ijou (1),"More than (or equal to), Over・(and) above, Any more・Greater, Exceeding",https://bunpro.jp/grammar_points/%E4%BB%A5%E4%B8%8A1
+N4,78,いか,ika,"Less than (or equal to), Under・(and) below, Any less・fewer, Not exceeding",https://bunpro.jp/grammar_points/%E3%81%84%E3%81%8B
+N4,79,いがい,igai,"Except・besides, Other than, With the exception of",https://bunpro.jp/grammar_points/%E3%81%84%E3%81%8C%E3%81%84
+N4,80,ずっと ①,zutto (1),"Continuously, All throughout, Entire time, Ever (since), The whole time, All the way",https://bunpro.jp/grammar_points/%E3%81%9A%E3%81%A3%E3%81%A81
+N4,81,だいたい,daitai,"Most・mostly, Adequately・generally, For the most part, Roughly・approximately, In the first place",https://bunpro.jp/grammar_points/%E3%81%A0%E3%81%84%E3%81%9F%E3%81%84
+N4,82,のなかで,no naka de,"In, Among, Within",https://bunpro.jp/grammar_points/%E3%81%AE%E3%81%AA%E3%81%8B%E3%81%A7
+N4,83,ように・ような,you ni / you na,"As・like, Just like",https://bunpro.jp/grammar_points/%E3%82%88%E3%81%86%E3%81%AB-%E3%82%88%E3%81%86%E3%81%AA
+N4,84,Number/Amount + は,number / amount + wa,"At least, Sort of, Or so",https://bunpro.jp/grammar_points/number-amount-%E3%81%AF
+N4,85,なん + counter + か,nan + counter + ka,"Some, Several, A few",https://bunpro.jp/grammar_points/%E3%81%AA%E3%82%93-counter-%E3%81%8B
+N4,86,真(っ),ma(っ),"Completely, Exactly, Right",https://bunpro.jp/grammar_points/%E7%9C%9F(%E3%81%A3)
+N4,87,Number + しか〜ない,number + shika ~ nai,"No more than, Not exceeding, As few as・as little as, Only",https://bunpro.jp/grammar_points/number-%E3%81%97%E3%81%8B-%E3%81%AA%E3%81%84
+N4,88,～は～の一つだ,~wa ~ no hitotsu da,〜 is one of (many) 〜,https://bunpro.jp/grammar_points/%E3%81%AF-%E3%81%AE%E4%B8%80%E3%81%A4%E3%81%A0
+N4,89,～ない～はない,~nai ~ wa nai,There is not ~ that is not/does not,https://bunpro.jp/grammar_points/%E3%81%AA%E3%81%84-%E3%81%AF%E3%81%AA%E3%81%84
+N4,90,すこしも～ない,sukoshi mo ~ nai,"Not even a little, Not at all, Not in the least, Never",https://bunpro.jp/grammar_points/%E3%81%99%E3%81%93%E3%81%97%E3%82%82-%E3%81%AA%E3%81%84
+N4,91,すくなくない,sukunakunai,"Quite a few, Quite a lot, Many, Not a few, Not a little",https://bunpro.jp/grammar_points/%E3%81%99%E3%81%8F%E3%81%AA%E3%81%8F%E3%81%AA%E3%81%84
+N4,92,ばあいは,baai wa,"In the event of, In the case of",https://bunpro.jp/grammar_points/%E3%81%B0%E3%81%82%E3%81%84%E3%81%AF
+N4,93,Verb[て],verb [te],Please do for me (Casual request),https://bunpro.jp/grammar_points/verb%E3%81%A6-request
+N4,94,てよかった,te yokatta,I'm glad that,https://bunpro.jp/grammar_points/%E3%81%A6%E3%82%88%E3%81%8B%E3%81%A3%E3%81%9F
+N4,95,Verb［せる・させる］,verb [seru / saseru],To make/let/have (somebody do something),https://bunpro.jp/grammar_points/causative
+N4,96,といってもいい,to itte mo ii,"You could say, You might say",https://bunpro.jp/grammar_points/%E3%81%A8%E3%81%84%E3%81%A3%E3%81%A6%E3%82%82%E3%81%84%E3%81%84
+N4,97,ても,temo,"Even if, Even though",https://bunpro.jp/grammar_points/%E3%81%A6%E3%82%82
+N4,98,てしまう・ちゃう,te shimau / chau,"To do something by accident, To finish completely・totally, Unfortunately",https://bunpro.jp/grammar_points/%E3%81%A6%E3%81%97%E3%81%BE%E3%81%86-%E3%81%A1%E3%82%83%E3%81%86
+N4,99,Verb[て] + B,verb [te] + B,"And・and so, Due to, Because of, Since, Conjunctive",https://bunpro.jp/grammar_points/verb%E3%81%A6-b2
+N4,100,Causative-Passive,causative-passive,"Verbs (Causative-passive voice), To be made to do something, To be forced to do",https://bunpro.jp/grammar_points/causative-passive
+N4,101,Verb[て]・Noun[で] + B,verb [te] / noun [de] + B,"By, With, On, By means of, ~ing with",https://bunpro.jp/grammar_points/verb-%E3%81%A6-noun-%E3%81%A7-b
+N4,102,てある,te aru,"Something is done, Has been done, Remaining state",https://bunpro.jp/grammar_points/%E3%81%A6%E3%81%82%E3%82%8B
+N4,103,ように～てほしい,you ni ~ te hoshii,"Want ~ to ~ like ~, Want ~ to be able to ~, Want ~ to ~ in the way of ~",https://bunpro.jp/grammar_points/%E3%82%88%E3%81%86%E3%81%AB-%E3%81%A6%E3%81%BB%E3%81%97%E3%81%84
+N4,104,ているあいだに,te iru aida ni,"While, During the time that ~",https://bunpro.jp/grammar_points/%E3%81%A6%E3%81%84%E3%82%8B%E3%81%82%E3%81%84%E3%81%A0%E3%81%AB
+N4,105,なくてもいい,nakute mo ii,Don't have to,https://bunpro.jp/grammar_points/%E3%81%AA%E3%81%8F%E3%81%A6%E3%82%82%E3%81%84%E3%81%84
+N4,106,てみる,te miru,To try to,https://bunpro.jp/grammar_points/%E3%81%A6%E3%81%BF%E3%82%8B
+N4,107,てすみません,te sumimasen,I'm sorry for,https://bunpro.jp/grammar_points/%E3%81%A6%E3%81%99%E3%81%BF%E3%81%BE%E3%81%9B%E3%82%93
+N4,108,てあげる,te ageru,"To do something for someone, As a favor for",https://bunpro.jp/grammar_points/%E3%81%A6%E3%81%82%E3%81%92%E3%82%8B
+N4,109,てくれる,te kureru,To do something for someone (usually you),https://bunpro.jp/grammar_points/%E3%81%A6%E3%81%8F%E3%82%8C%E3%82%8B
+N4,110,てもらう,te morau,"To get someone to do, To have someone do",https://bunpro.jp/grammar_points/%E3%81%A6%E3%82%82%E3%82%89%E3%81%86
+N4,111,なさい,nasai,Command to do,https://bunpro.jp/grammar_points/%E3%81%AA%E3%81%95%E3%81%84
+N4,112,Verb[て] + B,verb [te] + B,"Non-sequence, And, But (Contrast), Parallel action/state",https://bunpro.jp/grammar_points/verb%E3%81%A6-b
+N4,113,Verb[ないで],verb [naide],"(Please) do not (for me), Casual request",https://bunpro.jp/grammar_points/verb-%E3%81%AA%E3%81%84%E3%81%A7
+N4,114,てくれてありがとう,te kurete arigatou,Thank you for ~ ing,https://bunpro.jp/grammar_points/%E3%81%A6%E3%81%8F%E3%82%8C%E3%81%A6%E3%81%82%E3%82%8A%E3%81%8C%E3%81%A8%E3%81%86
+N4,115,てくれない・てもらえない,te kurenai / te moraenai,"Won't you?, Will you?, Could you?, Can you?, Would you?",https://bunpro.jp/grammar_points/%E3%81%A6%E3%81%8F%E3%82%8C%E3%81%AA%E3%81%84-%E3%81%A6%E3%82%82%E3%82%89%E3%81%88%E3%81%AA%E3%81%84
+N4,116,～のだろうか,~no darou ka,I wonder...,https://bunpro.jp/grammar_points/%E3%81%AE%E3%81%A0%E3%82%8D%E3%81%86%E3%81%8B
+N4,117,お～になる,o~ni naru,To do (Honorific),https://bunpro.jp/grammar_points/%E3%81%8A-%E3%81%AB%E3%81%AA%E3%82%8B
+N4,118,なさる,nasaru,To do (Honorific),https://bunpro.jp/grammar_points/%E3%81%AA%E3%81%95%E3%82%8B
+N4,119,お～ください,o~kudasai,Please do (Honorific),https://bunpro.jp/grammar_points/%E3%81%8A-%E3%81%8F%E3%81%A0%E3%81%95%E3%81%84
+N4,120,いらっしゃる,irassharu,"To be (Honorific), To come (Honorific), To go (Honorific)",https://bunpro.jp/grammar_points/%E3%81%84%E3%82%89%E3%81%A3%E3%81%97%E3%82%83%E3%82%8B
+N4,121,ございます,gozaimasu,"To be, To exist (Polite)",https://bunpro.jp/grammar_points/%E3%81%94%E3%81%96%E3%81%84%E3%81%BE%E3%81%99
+N4,122,でございます,de gozaimasu,"To be, Polite copula",https://bunpro.jp/grammar_points/%E3%81%A7%E3%81%94%E3%81%96%E3%81%84%E3%81%BE%E3%81%99
+N4,123,お〜する,o~suru,"I humbly do, I am obliged to do, Humble speech",https://bunpro.jp/grammar_points/%E3%81%8A-%E3%81%99%E3%82%8B
+N4,124,いたす,itasu,To do (Humble),https://bunpro.jp/grammar_points/%E3%81%84%E3%81%9F%E3%81%99
+N4,125,ていただけませんか,te itadakemasen ka,"Won't you, Could you please (Humble request)",https://bunpro.jp/grammar_points/%E3%81%A6%E3%81%84%E3%81%9F%E3%81%A0%E3%81%91%E3%81%BE%E3%81%9B%E3%82%93%E3%81%8B
+N4,126,たら,tara,"When, From when, Just when, If",https://bunpro.jp/grammar_points/%E3%81%9F%E3%82%89
+N4,127,ほかに(も)・ほか(に)は,hoka ni (mo) / hoka (ni) wa,"Other, Another, Any other, Anything else, As well as, Besides, In addition",https://bunpro.jp/grammar_points/%E3%81%BB%E3%81%8B%E3%81%AB%E3%82%82-%E3%81%BB%E3%81%8B%E3%81%AB%E3%81%AF
+N4,128,がひつよう,ga hitsuyou,"Need, Necessary",https://bunpro.jp/grammar_points/%E3%81%8C%E3%81%B2%E3%81%A4%E3%82%88%E3%81%86
+N4,129,そんなに,sonna ni,"So (much), That much, Like that",https://bunpro.jp/grammar_points/%E3%81%9D%E3%82%93%E3%81%AA%E3%81%AB
+N4,130,ひつようがある,hitsuyou ga aru,It is necessary to,https://bunpro.jp/grammar_points/%E3%81%B2%E3%81%A4%E3%82%88%E3%81%86%E3%81%8C%E3%81%82%E3%82%8B
+N4,131,たとえば,tatoeba,For example,https://bunpro.jp/grammar_points/%E3%81%9F%E3%81%A8%E3%81%88%E3%81%B0
+N4,132,れる・られる (Potential),reru / rareru (potential),"To be able, Can (Potential)",https://bunpro.jp/grammar_points/Verb%5Bpotential%5D
+N4,133,んだけど・んですが,n da kedo / n desu ga,"But..., And...",https://bunpro.jp/grammar_points/%E3%82%93%E3%81%A0%E3%81%91%E3%81%A9-%E3%82%93%E3%81%A7%E3%81%99%E3%81%8C
+N4,134,はずだ,hazu da,"Bound to (be), Expected to (be), Should be (able)",https://bunpro.jp/grammar_points/%E3%81%AF%E3%81%9A%E3%81%A0
+N4,135,かどうか,ka dou ka,"Whether or not, If...or not",https://bunpro.jp/grammar_points/%E3%81%8B%E3%81%A9%E3%81%86%E3%81%8B
+N4,136,と,to,"If, When, Whenever, And, [Conditional]",https://bunpro.jp/grammar_points/%E3%81%A8-conditional
+N4,137,ないと,naito,"Must, Have to",https://bunpro.jp/grammar_points/%E3%81%AA%E3%81%84%E3%81%A8
+N4,138,はずがない,hazu ga nai,"Hardly possible, Cannot be, Highly unlikely, Improbable",https://bunpro.jp/grammar_points/%E3%81%AF%E3%81%9A%E3%81%8C%E3%81%AA%E3%81%84
+N4,139,しか～ない,shika ~ nai,"There's only, Nothing but",https://bunpro.jp/grammar_points/%E3%81%97%E3%81%8B-%E3%81%AA%E3%81%84
+N4,140,だけでなく,dake de naku,Not only… but also,https://bunpro.jp/grammar_points/%E3%81%A0%E3%81%91%E3%81%A7%E3%81%AA%E3%81%8F
+N4,141,ことができる,koto ga dekiru,"Can, Be able to",https://bunpro.jp/grammar_points/%E3%81%93%E3%81%A8%E3%81%8C%E3%81%A7%E3%81%8D%E3%82%8B
+N4,142,かい,kai,Question marker,https://bunpro.jp/grammar_points/%E3%81%8B%E3%81%84
+N4,143,もし,moshi,If (For emphasis),https://bunpro.jp/grammar_points/%E3%82%82%E3%81%97
+N4,144,し～し,shi ~ shi,"And, Giving reasons",https://bunpro.jp/grammar_points/%E3%81%97-%E3%81%97
+N4,145,でできる・からできる,de dekiru / kara dekiru,"Made of, Made from, Produced from, Come from",https://bunpro.jp/grammar_points/%E3%81%A7%E3%81%A7%E3%81%8D%E3%82%8B-%E3%81%8B%E3%82%89%E3%81%A7%E3%81%8D%E3%82%8B
+N4,146,ながら,nagara,"While ~ing, During, As",https://bunpro.jp/grammar_points/%E3%81%AA%E3%81%8C%E3%82%89
+N4,147,たところだ,ta tokoro da,"Just finished doing, Was just doing",https://bunpro.jp/grammar_points/%E3%81%9F%E3%81%A8%E3%81%93%E3%82%8D%E3%81%A0
+N4,148,ているところだ,te iru tokoro da,In the process of doing ~ right now/at this moment,https://bunpro.jp/grammar_points/%E3%81%A6%E3%81%84%E3%82%8B%E3%81%A8%E3%81%93%E3%82%8D%E3%81%A0
+N4,149,と～と、どちらが,"to ~ to, dochira ga",Between ~ which one,https://bunpro.jp/grammar_points/%E3%81%A8-%E3%81%A8-%E3%81%A9%E3%81%A1%E3%82%89%E3%81%8C
+N4,150,ようにする,you ni suru,"To try to, To make sure to, To endeavor to",https://bunpro.jp/grammar_points/%E3%82%88%E3%81%86%E3%81%AB%E3%81%99%E3%82%8B
+N4,151,なければいけない,nakereba ikenai,"Must do, Have to do",https://bunpro.jp/grammar_points/%E3%81%AA%E3%81%91%E3%82%8C%E3%81%B0%E3%81%84%E3%81%91%E3%81%AA%E3%81%84
+N4,152,なければならない,nakereba naranai,"Must do, Have to do",https://bunpro.jp/grammar_points/%E3%81%AA%E3%81%91%E3%82%8C%E3%81%B0%E3%81%AA%E3%82%89%E3%81%AA%E3%81%84
+N4,153,つづける,tsuzukeru,To continue,https://bunpro.jp/grammar_points/%E3%81%A4%E3%81%A5%E3%81%91%E3%82%8B
+N4,154,ようにいう,you ni iu,"To tell, request, or order to do (in such a way)",https://bunpro.jp/grammar_points/%E3%82%88%E3%81%86%E3%81%AB%E3%81%84%E3%81%86
+N4,155,よていだ,yotei da,"Plan to, Intend to",https://bunpro.jp/grammar_points/%E3%82%88%E3%81%A6%E3%81%84%E3%81%A0
+N4,156,ようにいのる,you ni inoru,"Pray that/for, Hope that/for, Keep fingers crossed that",https://bunpro.jp/grammar_points/%E3%82%88%E3%81%86%E3%81%AB%E3%81%84%E3%81%AE%E3%82%8B
+N4,157,たばかり,ta bakari,"Just did, Something just happened",https://bunpro.jp/grammar_points/%E3%81%9F%E3%81%B0%E3%81%8B%E3%82%8A
+N4,158,化する,ka suru,"-ification, -ization, To make something, To change, To become, Transform into",https://bunpro.jp/grammar_points/%E5%8C%96%E3%81%99%E3%82%8B
+N4,159,命令形,meireikei,"(Verb)!, Do (something)!",https://bunpro.jp/grammar_points/%E5%91%BD%E4%BB%A4%E5%BD%A2
+N4,160,ように,you ni,"So that, In order to, In such a way that",https://bunpro.jp/grammar_points/%E3%82%88%E3%81%86%E3%81%AB
+N4,161,かしら,kashira,I wonder,https://bunpro.jp/grammar_points/%E3%81%8B%E3%81%97%E3%82%89
+N4,162,らしい ②,rashii (2),"typical of, -ish・like, appropriate for, becoming of, befitting",https://bunpro.jp/grammar_points/%E3%82%89%E3%81%97%E3%81%842
+N4,163,にみえる,ni mieru,"To look, To seem, To appear",https://bunpro.jp/grammar_points/%E3%81%AB%E3%81%BF%E3%81%88%E3%82%8B
+N4,164,とみえる,to mieru,"It seems that, It can be deduced, One can conclude that",https://bunpro.jp/grammar_points/%E3%81%A8%E3%81%BF%E3%81%88%E3%82%8B
+N4,165,風,fuu,"-style, Way, Fashion",https://bunpro.jp/grammar_points/%E9%A2%A8
+N4,166,がみられる,ga mirareru,"Can see, Can be seen, Can observe, Can be observed, Be evident, Chance to see something",https://bunpro.jp/grammar_points/%E3%81%8C%E3%81%BF%E3%82%89%E3%82%8C%E3%82%8B
+N4,167,にきがつく,ni kigatsuku,"To notice (that), To realize (that)",https://bunpro.jp/grammar_points/%E3%81%AB%E3%81%8D%E3%81%8C%E3%81%A4%E3%81%8F
+N4,168,〜でも 〜でも,~demo ~demo,"Whether ~ or, Neither ~ or",https://bunpro.jp/grammar_points/%E3%81%A7%E3%82%82-%E3%81%A7%E3%82%82
+N4,169,それに,sore ni,"And, Besides, Moreover, In addition",https://bunpro.jp/grammar_points/%E3%81%9D%E3%82%8C%E3%81%AB
+N4,170,それで,sore de,"Because of that, So?, And then?, Therefore, With that",https://bunpro.jp/grammar_points/%E3%81%9D%E3%82%8C%E3%81%A7
+N4,171,Question-phrase + か,question-phrase + ka,Including questions within sentences,https://bunpro.jp/grammar_points/question-phrase-%E3%81%8B
+N4,172,それでも,sore demo,"But still, And yet, Even so, Nevertheless",https://bunpro.jp/grammar_points/%E3%81%9D%E3%82%8C%E3%81%A7%E3%82%82
+N4,173,たらどう,tara dou,"Why don't you...?, What if you did...?",https://bunpro.jp/grammar_points/%E3%81%9F%E3%82%89%E3%81%A9%E3%81%86
+N4,174,とかんがえられている,to kangaerarete iru,"Is considered, Is thought of as",https://bunpro.jp/grammar_points/%E3%81%A8%E3%81%8B%E3%82%93%E3%81%8C%E3%81%88%E3%82%89%E3%82%8C%E3%81%A6%E3%81%84%E3%82%8B
+N4,175,とされている,to sarete iru,"To be considered, To be deemed, Be regarded as, Be accepted as, To be said, To be accredited with",https://bunpro.jp/grammar_points/%E3%81%A8%E3%81%95%E3%82%8C%E3%81%A6%E3%81%84%E3%82%8B
+N4,176,といわれている,to iwarete iru,"It is said that, Is known as",https://bunpro.jp/grammar_points/%E3%81%A8%E3%81%84%E3%82%8F%E3%82%8C%E3%81%A6%E3%81%84%E3%82%8B
+N4,177,ばよかった,ba yokatta,"Should have, I wish, It would have been better to",https://bunpro.jp/grammar_points/%E3%81%B0%E3%82%88%E3%81%8B%E3%81%A3%E3%81%9F
+N3,1,ばいい,baii,"Can, Should, It'd be good if",https://bunpro.jp/grammar_points/%E3%81%B0%E3%81%84%E3%81%84
+N3,2,たらいい・といい,tara ii / to ii,"It would be nice if, It would be good if, Should, I hope",https://bunpro.jp/grammar_points/%E3%81%9F%E3%82%89%E3%81%84%E3%81%84-%E3%81%A8%E3%81%84%E3%81%84
+N3,3,中,naka,"During, While, Throughout, In the process of",https://bunpro.jp/grammar_points/%E4%B8%AD
+N3,4,の間に,no aida ni,"While, During, Between, Period",https://bunpro.jp/grammar_points/%E3%81%AE%E9%96%93%E3%81%AB
+N3,5,うちに,uchi ni,"While, During",https://bunpro.jp/grammar_points/%E3%81%86%E3%81%A1%E3%81%AB
+N3,6,ないうちに,nai uchi ni,"Before it becomes, Before ~ occurs, Without",https://bunpro.jp/grammar_points/%E3%81%AA%E3%81%84%E3%81%86%E3%81%A1%E3%81%AB
+N3,7,べき,beki,"Must, Should , Ought to",https://bunpro.jp/grammar_points/%E3%81%B9%E3%81%8D
+N3,8,べきではない,beki de wa nai,"Should not, Must not , Ought not to",https://bunpro.jp/grammar_points/%E3%81%B9%E3%81%8D%E3%81%A7%E3%81%AF%E3%81%AA%E3%81%84
+N3,9,って,tte,"As for, Speaking of, Casual は (Sentence topic marker)",https://bunpro.jp/grammar_points/%E3%81%A3%E3%81%A6-slang
+N3,10,なかなか,nakanaka,"Very, Quite, Considerably",https://bunpro.jp/grammar_points/%E3%81%AA%E3%81%8B%E3%81%AA%E3%81%8B
+N3,11,あまり,amari,So much...that,https://bunpro.jp/grammar_points/%E3%81%82%E3%81%BE%E3%82%8A
+N3,12,なかなか～ない,nakanaka ~ nai,"Not really, Hardly, Not easily or readily, By no means, Far from",https://bunpro.jp/grammar_points/%E3%81%AA%E3%81%8B%E3%81%AA%E3%81%8B-%E3%81%AA%E3%81%84
+N3,13,によると・によれば,ni yoru to / ni yoreba,According to,https://bunpro.jp/grammar_points/%E3%81%AB%E3%82%88%E3%82%8B%E3%81%A8-%E3%81%AB%E3%82%88%E3%82%8C%E3%81%B0
+N3,14,によって・による,ni yotte / ni yoru,"By means of, According to, Depending on, Because of, Due to",https://bunpro.jp/grammar_points/%E3%81%AB%E3%82%88%E3%81%A3%E3%81%A6-%E3%81%AB%E3%82%88%E3%82%8B
+N3,15,全く～ない,mattaku ~ nai,Not~at all,https://bunpro.jp/grammar_points/%E5%85%A8%E3%81%8F-%E3%81%AA%E3%81%84
+N3,16,ことだ,koto da,"Should, Ought",https://bunpro.jp/grammar_points/%E3%81%93%E3%81%A8%E3%81%A0
+N3,17,そうだ,sou da,"I heard that, It is said that",https://bunpro.jp/grammar_points/%E3%81%9D%E3%81%86%E3%81%A0
+N3,18,すると,suruto,"Having done..., If...is done..., (And/just) then, Thereupon, If so",https://bunpro.jp/grammar_points/%E3%81%99%E3%82%8B%E3%81%A8
+N3,19,そうすると,sou suru to,"Having done that..., If that is done..., (And/just) then, Thereupon, If so",https://bunpro.jp/grammar_points/%E3%81%9D%E3%81%86%E3%81%99%E3%82%8B%E3%81%A8
+N3,20,のはXの方だ,no wa X no hou da,"It is...that..., It is...who..., ...is the one that..., ...is the one who...",https://bunpro.jp/grammar_points/%E3%81%AE%E3%81%AFx%E3%81%AE%E6%96%B9%E3%81%A0
+N3,21,Noun＋型,noun + gata,"Model, Type, Pattern, Kind, Shape, Size(d)",https://bunpro.jp/grammar_points/noun-%E5%9E%8B
+N3,22,てごらん,te goran,"(Please) try to, (Please) look",https://bunpro.jp/grammar_points/%E3%81%A6%E3%81%94%E3%82%89%E3%82%93
+N3,23,Particle + の,particle + no,Combined particles,https://bunpro.jp/grammar_points/particle-%E3%81%AE
+N3,24,である,de aru,"Formal or literary だ, Authoritative, Copula",https://bunpro.jp/grammar_points/%E3%81%A7%E3%81%82%E3%82%8B
+N3,25,ところが,tokoroga,"Even so, However, Even though, But",https://bunpro.jp/grammar_points/%E3%81%A8%E3%81%93%E3%82%8D%E3%81%8C
+N3,26,ところで,tokorode,"By the way, Incidentally",https://bunpro.jp/grammar_points/%E3%81%A8%E3%81%93%E3%82%8D%E3%81%A7
+N3,27,ほど,hodo,"The more, About, To the extent that, So much… that",https://bunpro.jp/grammar_points/%E3%81%BB%E3%81%A9
+N3,28,ば〜ほど,ba ~ hodo,The more…the more,https://bunpro.jp/grammar_points/%E3%81%B0-%E3%81%BB%E3%81%A9
+N3,29,ほど～ない,hodo ~ nai,"Is not as…as, Isn't... like..., Not to the extent of...",https://bunpro.jp/grammar_points/%E3%81%BB%E3%81%A9%EF%BD%9E%E3%81%AA%E3%81%84
+N3,30,では・それでは・じゃあ,de wa / sore de wa / jaa,"If so, Well (then), In that case",https://bunpro.jp/grammar_points/%E3%81%A7%E3%81%AF-%E3%81%9D%E3%82%8C%E3%81%A7%E3%81%AF-%E3%81%98%E3%82%83%E3%81%82
+N3,31,のに,noni,In order to,https://bunpro.jp/grammar_points/%E3%81%AE%E3%81%AB
+N3,32,ため(に),tame (ni),"For, For the sake of, In order to",https://bunpro.jp/grammar_points/%E3%81%9F%E3%82%81-%E3%81%AB
+N3,33,ために,tame ni,"Due to, Because of, As a result of",https://bunpro.jp/grammar_points/%E3%81%9F%E3%82%81%E3%81%AB
+N3,34,という,to iu,"Called, Named, Known as, As much as",https://bunpro.jp/grammar_points/%E3%81%A8%E3%81%84%E3%81%86-called
+N3,35,ということだ,to iu koto da,"I heard that, Rumor has it that, It is said that, It means that",https://bunpro.jp/grammar_points/%E3%81%A8%E3%81%84%E3%81%86%E3%81%93%E3%81%A8%E3%81%A0
+N3,36,というのは,to iu no wa,"~ Known as ~ is, ~ Called ~ is, ~ Means ~, Because",https://bunpro.jp/grammar_points/%E3%81%A8%E3%81%84%E3%81%86%E3%81%AE%E3%81%AF
+N3,37,的,~teki,"~ly・~like・~al, Typical",https://bunpro.jp/grammar_points/%E7%9A%84
+N3,38,もの・もん,mono / mon,"Because, Cause",https://bunpro.jp/grammar_points/%E3%82%82%E3%81%AE-%E3%82%82%E3%82%93
+N3,39,ものだ,mono da,"Supposed to, Should, That's the way it is",https://bunpro.jp/grammar_points/%E3%82%82%E3%81%AE%E3%81%A0
+N3,40,最中に,saichuu ni,In the middle of,https://bunpro.jp/grammar_points/%E6%9C%80%E4%B8%AD%E3%81%AB
+N3,41,上で,ue de,"After, Upon",https://bunpro.jp/grammar_points/%E4%B8%8A%E3%81%A7
+N3,42,おかげで,okage de,"Thanks to, Because of",https://bunpro.jp/grammar_points/%E3%81%8A%E3%81%8B%E3%81%92%E3%81%A7
+N3,43,にもとづいて,ni motodzuite,"Based on, In accordance with",https://bunpro.jp/grammar_points/%E3%81%AB%E3%82%82%E3%81%A8%E3%81%A5%E3%81%84%E3%81%A6
+N3,44,点,ten,"Aspect, Respect, Point, Way, In terms of, In that, From the point of view",https://bunpro.jp/grammar_points/%E7%82%B9
+N3,45,なぜなら〜から,nazenara ~ kara,"Because, The reason is, That is because",https://bunpro.jp/grammar_points/%E3%81%AA%E3%81%9C%E3%81%AA%E3%82%89-%E3%81%8B%E3%82%89
+N3,46,こそ,koso,"For sure, For certain, Even more so, Underlined or bolded text",https://bunpro.jp/grammar_points/%E3%81%93%E3%81%9D
+N3,47,からこそ,kara koso,"Emphasized because, Precisely because",https://bunpro.jp/grammar_points/%E3%81%8B%E3%82%89%E3%81%93%E3%81%9D
+N3,48,ばかり,bakari,"Just, Only, Nothing but",https://bunpro.jp/grammar_points/%E3%81%B0%E3%81%8B%E3%82%8A
+N3,49,ばかりだ,bakari da,"(Only) continue to, Keep on -ing, More and more",https://bunpro.jp/grammar_points/%E3%81%B0%E3%81%8B%E3%82%8A%E3%81%A0
+N3,50,ばかりに,bakari ni,"Simply because, Only because, Just because, Simply on account of",https://bunpro.jp/grammar_points/%E3%81%B0%E3%81%8B%E3%82%8A%E3%81%AB
+N3,51,ことがある,koto ga aru,"Something is possible, Sometimes, Occasionally, There are times when",https://bunpro.jp/grammar_points/%E3%81%93%E3%81%A8%E3%81%8C%E3%81%82%E3%82%8B
+N3,52,ことにする,koto ni suru,"To decide on, Have decided to",https://bunpro.jp/grammar_points/%E3%81%93%E3%81%A8%E3%81%AB%E3%81%99%E3%82%8B
+N3,53,ことなの,koto na no,"(A) is (Description of A), (A) means that (Description of A)",https://bunpro.jp/grammar_points/%E3%81%93%E3%81%A8%E3%81%AA%E3%81%AE
+N3,54,ことになる,koto ni naru,"It will end up being, It is the result of, It has been decided that",https://bunpro.jp/grammar_points/%E3%81%93%E3%81%A8%E3%81%AB%E3%81%AA%E3%82%8B
+N3,55,～は～で有名,~ wa ~ de yuumei,Is famous for,https://bunpro.jp/grammar_points/%E3%81%AF-%E3%81%A7%E6%9C%89%E5%90%8D
+N3,56,ことはない,koto wa nai,"There is no need to, Never happens",https://bunpro.jp/grammar_points/%E3%81%93%E3%81%A8%E3%81%AF%E3%81%AA%E3%81%84
+N3,57,～と言っても,~ to itte mo,Although ~ might say that ~,https://bunpro.jp/grammar_points/%E3%81%A8%E8%A8%80%E3%81%A3%E3%81%A6%E3%82%82
+N3,58,といえば,to ieba,"Speaking of, If it were the case that",https://bunpro.jp/grammar_points/%E3%81%A8%E3%81%84%E3%81%88%E3%81%B0
+N3,59,合う,au,"To or for one another, Mutually, With",https://bunpro.jp/grammar_points/%E5%90%88%E3%81%86
+N3,60,に合わせて・に合った,ni awasete / ni atta,"In accordance with, Matching, Fitting, Suitable for, Adjust or tune to",https://bunpro.jp/grammar_points/%E3%81%AB%E5%90%88%E3%82%8F%E3%81%9B%E3%81%A6-%E3%81%AB%E5%90%88%E3%81%A3%E3%81%9F
+N3,61,について,ni tsuite,"Concerning, About, Regarding",https://bunpro.jp/grammar_points/%E3%81%AB%E3%81%A4%E3%81%84%E3%81%A6
+N3,62,～(の)姿,~ (no) sugata,"Figure, Shape, Appearance, Looks, Wearing, Dressed in, Presence",https://bunpro.jp/grammar_points/%E3%81%AE%E5%A7%BF
+N3,63,と言える,to ieru,"Would or could say that..., Can probably say that..., Fair to say that...",https://bunpro.jp/grammar_points/%E3%81%A8%E8%A8%80%E3%81%88%E3%82%8B
+N3,64,ちゃんと・きちんと,chanto / kichinto,"Properly, Neatly, Orderly, Sufficiently, Decently",https://bunpro.jp/grammar_points/%E3%81%A1%E3%82%83%E3%82%93%E3%81%A8-%E3%81%8D%E3%81%A1%E3%82%93%E3%81%A8
+N3,65,そのため(に),sono tame (ni),"For that reason, Because of that, To that end",https://bunpro.jp/grammar_points/%E3%81%9D%E3%81%AE%E3%81%9F%E3%82%81-%E3%81%AB
+N3,66,その結果,sono kekka,As a result,https://bunpro.jp/grammar_points/%E3%81%9D%E3%81%AE%E7%B5%90%E6%9E%9C
+N3,67,に比べて,ni kurabete,"Compared to, When compared to",https://bunpro.jp/grammar_points/%E3%81%AB%E6%AF%94%E3%81%B9%E3%81%A6
+N3,68,どんなに〜ても,donna ni ~ temo,No matter how,https://bunpro.jp/grammar_points/%E3%81%A9%E3%82%93%E3%81%AA%E3%81%AB-%E3%81%A6%E3%82%82
+N3,69,いくら〜でも,ikura ~ demo,No matter how (much),https://bunpro.jp/grammar_points/%E3%81%84%E3%81%8F%E3%82%89-%E3%81%A7%E3%82%82
+N3,70,〜かは〜によって違う,~ ka wa ~ ni yotte chigau,"Depends on, Changes depending on, Differ depending on",https://bunpro.jp/grammar_points/%E3%81%8B%E3%81%AF-%E3%81%AB%E3%82%88%E3%81%A3%E3%81%A6%E9%81%95%E3%81%86
+N3,71,かなり,kanari,"Quite, Considerably, Pretty, Fairly",https://bunpro.jp/grammar_points/%E3%81%8B%E3%81%AA%E3%82%8A
+N3,72,あまりに,amari ni,"So much...that, (Way) too...",https://bunpro.jp/grammar_points/%E3%81%82%E3%81%BE%E3%82%8A%E3%81%AB
+N3,73,わけだ,wake da,"For that reason, No wonder, As you'd expect, Naturally, Thus, This is why",https://bunpro.jp/grammar_points/%E3%82%8F%E3%81%91%E3%81%A0
+N3,74,わけではない,wake de wa nai,"It doesn't mean that, It is not the case, It's not like",https://bunpro.jp/grammar_points/%E3%82%8F%E3%81%91%E3%81%A7%E3%81%AF%E3%81%AA%E3%81%84
+N3,75,と同時に,to douji ni,"At the same time as, The instant, The moment, As well as",https://bunpro.jp/grammar_points/%E3%81%A8%E5%90%8C%E6%99%82%E3%81%AB
+N3,76,ところだった ①,tokoro datta (1),"Almost, Nearly, About to, On the verge of",https://bunpro.jp/grammar_points/%E3%81%A8%E3%81%93%E3%82%8D%E3%81%A0%E3%81%A3%E3%81%9F1
+N3,77,だって,datte,"I heard/was said, Because, But, Even or also, Even if or even though",https://bunpro.jp/grammar_points/%E3%81%A0%E3%81%A3%E3%81%A6
+N3,78,んだって,n datte,"I heard that, He or She said that",https://bunpro.jp/grammar_points/%E3%82%93%E3%81%A0%E3%81%A3%E3%81%A6
+N3,79,関係がある,kankei ga aru,"(Not) involved with, (Not) concerned with, (No) connection with, (No) relationship with, (Not) related to",https://bunpro.jp/grammar_points/%E9%96%A2%E4%BF%82%E3%81%8C%E3%81%82%E3%82%8B
+N3,80,に関する・に関して,ni kansuru / ni kanshite,"Related to, About, Regarding",https://bunpro.jp/grammar_points/%E3%81%AB%E9%96%A2%E3%81%99%E3%82%8B-%E3%81%AB%E9%96%A2%E3%81%97%E3%81%A6
+N3,81,に対して,ni taishite,"In contrast to, While, In regard to, Whereas",https://bunpro.jp/grammar_points/%E3%81%AB%E5%AF%BE%E3%81%97%E3%81%A6
+N3,82,くらい ②,kurai (2),"To the extent that, So…that, About the only thing that...",https://bunpro.jp/grammar_points/%E3%81%8F%E3%82%89%E3%81%842
+N3,83,は～くらいです,wa ~ kurai desu,"About the only, To the extent that",https://bunpro.jp/grammar_points/%E3%81%AF-%E3%81%8F%E3%82%89%E3%81%84%E3%81%A7%E3%81%99
+N3,84,さ - Interjection,sa (interjection),"All right, There we go, Now, You see, Well (I don't know, let me see)",https://bunpro.jp/grammar_points/%E3%81%95-interjection
+N3,85,さ - Filler,sa (filler),"Like, You know, You see, Listen, Uhh",https://bunpro.jp/grammar_points/%E3%81%95-filler
+N3,86,さ - Casual よ,sa (casual yo),Casual よ,https://bunpro.jp/grammar_points/%E3%81%95-casual%E3%82%88
+N3,87,それぞれ,sorezore,"Each, Respectively",https://bunpro.jp/grammar_points/%E3%81%9D%E3%82%8C%E3%81%9E%E3%82%8C
+N3,88,まま(に),mama (ni),"As is, While remaining, Left in a state",https://bunpro.jp/grammar_points/%E3%81%BE%E3%81%BE
+N3,89,そこで,sokode,"Accordingly, Now, Therefore, To that end",https://bunpro.jp/grammar_points/%E3%81%9D%E3%81%93%E3%81%A7
+N3,90,しかない,shika nai,"Have no choice but, Only, Just",https://bunpro.jp/grammar_points/%E3%81%97%E3%81%8B%E3%81%AA%E3%81%84
+N3,91,てもかまわない,temo kamawanai,"It doesn't matter if, I don't mind",https://bunpro.jp/grammar_points/%E3%81%A6%E3%82%82%E3%81%8B%E3%81%BE%E3%82%8F%E3%81%AA%E3%81%84
+N3,92,～ても～なくても,~temo ~nakutemo,Whether ~ or not,https://bunpro.jp/grammar_points/%E3%81%A6%E3%82%82-%E3%81%AA%E3%81%8F%E3%81%A6%E3%82%82
+N3,93,んじゃない,n ja nai,"Don't, Mustn't, Shouldn't have",https://bunpro.jp/grammar_points/%E3%82%93%E3%81%98%E3%82%83%E3%81%AA%E3%81%84
+N3,94,わけがない,wake ga nai,"There is no way, There is no reason, It is impossible, Cannot be",https://bunpro.jp/grammar_points/%E3%82%8F%E3%81%91%E3%81%8C%E3%81%AA%E3%81%84
+N3,95,としたら・とすれば・とすると,to shitara / to sureba / to suru to,"If it were the case that, Assuming that...",https://bunpro.jp/grammar_points/%E3%81%A8%E3%81%97%E3%81%9F%E3%82%89-%E3%81%A8%E3%81%99%E3%82%8C%E3%81%B0-%E3%81%A8%E3%81%99%E3%82%8B%E3%81%A8
+N3,96,として,toshite,"As (i.e. in the role of), For",https://bunpro.jp/grammar_points/%E3%81%A8%E3%81%97%E3%81%A6
+N3,97,にしては,ni shite wa,"(Even) considering, (Even) for",https://bunpro.jp/grammar_points/%E3%81%AB%E3%81%97%E3%81%A6%E3%81%AF
+N3,98,にしても,ni shite mo,"Even though, Even if, Even when, Also",https://bunpro.jp/grammar_points/%E3%81%AB%E3%81%97%E3%81%A6%E3%82%82
+N3,99,～というのは事実だ,~ to iu no wa jijitsu da,"It is a fact that ~, There is no doubt that",https://bunpro.jp/grammar_points/%E3%81%A8%E3%81%84%E3%81%86%E3%81%AE%E3%81%AF%E4%BA%8B%E5%AE%9F%E3%81%A0
+N3,100,から言うと,kara iu to,"Speaking in terms of, From the point of view of",https://bunpro.jp/grammar_points/%E3%81%8B%E3%82%89%E8%A8%80%E3%81%86%E3%81%A8
+N3,101,に取って,ni totte,"To, For, Concerning",https://bunpro.jp/grammar_points/%E3%81%AB%E5%8F%96%E3%81%A3%E3%81%A6
+N3,102,ことから,koto kara,From the fact that,https://bunpro.jp/grammar_points/%E3%81%93%E3%81%A8%E3%81%8B%E3%82%89
+N3,103,というより,to iu yori,"...is more of a... than a..., Rather than saying that...",https://bunpro.jp/grammar_points/%E3%81%A8%E3%81%84%E3%81%86%E3%82%88%E3%82%8A
+N3,104,はもちろん,wa mochiron,"Not only but also, Let alone, Not to mention, Of course",https://bunpro.jp/grammar_points/%E3%81%AF%E3%82%82%E3%81%A1%E3%82%8D%E3%82%93
+N3,105,をはじめ,o hajime,"Not only...but also..., Starting with",https://bunpro.jp/grammar_points/%E3%82%92%E3%81%AF%E3%81%98%E3%82%81
+N3,106,て初めて,te hajimete,"For the first time, Not until, Only after, Only when, Only because",https://bunpro.jp/grammar_points/%E3%81%A6%E5%88%9D%E3%82%81%E3%81%A6
+N3,107,さえ,sae,Even,https://bunpro.jp/grammar_points/%E3%81%95%E3%81%88
+N3,108,さえ〜ば,sae ~ ba,"If only…then, As long as..., Provided..., Only thing ... needs for ... is ...",https://bunpro.jp/grammar_points/%E3%81%95%E3%81%88-%E3%81%B0
+N3,109,たものだ,ta mono da,Used to,https://bunpro.jp/grammar_points/%E3%81%9F%E3%82%82%E3%81%AE%E3%81%A0
+N3,110,さて,sate,"Well, Well then",https://bunpro.jp/grammar_points/%E3%81%95%E3%81%A6
+N3,111,むしろ,mushiro,"Rather, Instead, Over",https://bunpro.jp/grammar_points/%E3%82%80%E3%81%97%E3%82%8D
+N3,112,つまり,tsumari,"In short, To sum up, In other words",https://bunpro.jp/grammar_points/%E3%81%A4%E3%81%BE%E3%82%8A
+N3,113,即ち,sunawachi,"In other words, That is, Namely",https://bunpro.jp/grammar_points/%E5%8D%B3%E3%81%A1
+N3,114,却って,kaette,"All the more, On the contrary, Conversely",https://bunpro.jp/grammar_points/%E5%8D%B4%E3%81%A3%E3%81%A6
+N3,115,まるで…ようだ,marude … you da,"It is entirely as if, It is just as though",https://bunpro.jp/grammar_points/%E3%81%BE%E3%82%8B%E3%81%A7-%E3%82%88%E3%81%86%E3%81%A0
+N3,116,ような気がする,you na ki ga suru,Have a feeling that,https://bunpro.jp/grammar_points/%E3%82%88%E3%81%86%E3%81%AA%E6%B0%97%E3%81%8C%E3%81%99%E3%82%8B
+N3,117,とても～ない,totemo ~ nai,"Not ~ at all, Cannot ~ at all",https://bunpro.jp/grammar_points/%E3%81%A8%E3%81%A6%E3%82%82-%E3%81%AA%E3%81%84
+N3,118,別に〜ない,betsu ni ~ nai,"Not really, Not particularly, It's not like...",https://bunpro.jp/grammar_points/%E5%88%A5%E3%81%AB-%E3%81%AA%E3%81%84
+N3,119,ばかりでなく,bakari denaku,"Not only…but also, As well as",https://bunpro.jp/grammar_points/%E3%81%B0%E3%81%8B%E3%82%8A%E3%81%A7%E3%81%AA%E3%81%8F
+N3,120,ではなくて・じゃなくて,de wa nakute / ja nakute,"Not A but B, Conjunctive",https://bunpro.jp/grammar_points/%E3%81%A7%E3%81%AF%E3%81%AA%E3%81%8F%E3%81%A6-%E3%81%98%E3%82%83%E3%81%AA%E3%81%8F%E3%81%A6
+N3,121,だけでなく(て)～も,dake denakute ~ mo,"Not only ~ but ~ also, Not just ~ but ~ also",https://bunpro.jp/grammar_points/%E3%81%A0%E3%81%91%E3%81%A7%E3%81%AA%E3%81%8F-%E3%81%A6-%E3%82%82
+N3,122,だけしか,dake shika,"To emphasize '~only', Nothing but",https://bunpro.jp/grammar_points/%E3%81%A0%E3%81%91%E3%81%97%E3%81%8B
+N3,123,は言うまでもない ①,wa iu made mo nai (1),"It goes without saying (that), (It is) needless to say, I don't need to remind you",https://bunpro.jp/grammar_points/%E3%81%AF%E8%A8%80%E3%81%86%E3%81%BE%E3%81%A7%E3%82%82%E3%81%AA%E3%81%841
+N3,124,決して〜ない,kesshite ~ nai,"Never, By no means",https://bunpro.jp/grammar_points/%E6%B1%BA%E3%81%97%E3%81%A6-%E3%81%AA%E3%81%84
+N3,125,わけにはいかない,wake ni wa ikanai,"Cannot afford to, No way, Impossible to do",https://bunpro.jp/grammar_points/%E3%82%8F%E3%81%91%E3%81%AB%E3%81%AF%E3%81%84%E3%81%8B%E3%81%AA%E3%81%84
+N3,126,〜ようとしない,~you to shinai,"Not willing to, Not make an effort to, To not attempt or try to, Volitional + としない",https://bunpro.jp/grammar_points/-%E3%82%88%E3%81%86%E3%81%A8%E3%81%97%E3%81%AA%E3%81%84
+N3,127,もしかしたら,moshikashitara,"Perhaps, Maybe, Possibly",https://bunpro.jp/grammar_points/%E3%82%82%E3%81%97%E3%81%8B%E3%81%97%E3%81%9F%E3%82%89
+N3,128,たとえ〜ても,tatoe ~ temo,"Even if…is the case, Supposing that",https://bunpro.jp/grammar_points/%E3%81%9F%E3%81%A8%E3%81%88-%E3%81%A6%E3%82%82
+N3,129,ことに,koto ni,"Extremely, Especially, To my ...",https://bunpro.jp/grammar_points/%E3%81%93%E3%81%A8%E3%81%AB
+N3,130,ことか,koto ka,"How…, What..., God knows...",https://bunpro.jp/grammar_points/%E3%81%93%E3%81%A8%E3%81%8B
+N3,131,～かというと ①,~ka to iu to (1),"Why? Well..., Why? Because..., If you ask me why..., The reason why is..., It is because...",https://bunpro.jp/grammar_points/%E3%81%8B%E3%81%A8%E3%81%84%E3%81%86%E3%81%A81
+N3,132,～かというと ②,~ka to iu to (2),"If you ask me..., If I had to say, If I were to say, If I were to choose one, I'd rather",https://bunpro.jp/grammar_points/%E3%81%8B%E3%81%A8%E3%81%84%E3%81%86%E3%81%A82
+N3,133,で言うと,de iu to,"In, Of, According to",https://bunpro.jp/grammar_points/%E3%81%A7%E8%A8%80%E3%81%86%E3%81%A8
+N3,134,～ずつ,~zutsu,"One at a time, Per, Each, Gradually",https://bunpro.jp/grammar_points/%E3%81%9A%E3%81%A4
+N3,135,ずっと ②,zutto (2),"By far, Way, Far...er, Far...more",https://bunpro.jp/grammar_points/%E3%81%9A%E3%81%A3%E3%81%A82
+N3,136,だらけ,darake,"Completely covered in, Full of",https://bunpro.jp/grammar_points/%E3%81%A0%E3%82%89%E3%81%91
+N3,137,もっとも,mottomo,"Although, But, However, For all that, Provided that",https://bunpro.jp/grammar_points/%E3%82%82%E3%81%A3%E3%81%A8%E3%82%82
+N3,138,再び,futatabi,"Again, Once more, A second time",https://bunpro.jp/grammar_points/%E5%86%8D%E3%81%B3
+N3,139,み,mi,"~ness, Used to indicate conditions or nature",https://bunpro.jp/grammar_points/%E3%81%BF
+N3,140,と同じくらい,to onaji kurai,"About the same as, About as, No less",https://bunpro.jp/grammar_points/%E3%81%A8%E5%90%8C%E3%81%98%E3%81%8F%E3%82%89%E3%81%84
+N3,141,と同じで・と違って,to onaji de / to chigatte,"Like, Similar to, Unlike, Dissimilar to",https://bunpro.jp/grammar_points/%E3%81%A8%E5%90%8C%E3%81%98%E3%81%A7-%E3%81%A8%E9%81%95%E3%81%A3%E3%81%A6
+N3,142,と並んで,to narande,"In line with, Comparable with, Along with, Just like, As … as",https://bunpro.jp/grammar_points/%E3%81%A8%E4%B8%A6%E3%82%93%E3%81%A7
+N3,143,に違いない,ni chigai nai,"There is no doubt that, I'm sure",https://bunpro.jp/grammar_points/%E3%81%AB%E9%81%95%E3%81%84%E3%81%AA%E3%81%84
+N3,144,当たり,atari,"Per~, A~, Apiece, Each",https://bunpro.jp/grammar_points/%E5%BD%93%E3%81%9F%E3%82%8A
+N3,145,に当たる,ni ataru,"Correspond to, Amounts to, Equals to, Is appropriate",https://bunpro.jp/grammar_points/%E3%81%AB%E5%BD%93%E3%81%9F%E3%82%8B
+N3,146,に限る,ni kagiru,"Nothing better than, There's nothing like, Limited to",https://bunpro.jp/grammar_points/%E3%81%AB%E9%99%90%E3%82%8B
+N3,147,とは限らない,to wa kagiranai,"Not necessarily so, Is not always true, There is no guarantee that",https://bunpro.jp/grammar_points/%E3%81%A8%E3%81%AF%E9%99%90%E3%82%89%E3%81%AA%E3%81%84
+N3,148,めったに〜ない,mettani ~ nai,"Hardly, Rarely, Seldom",https://bunpro.jp/grammar_points/%E3%82%81%E3%81%A3%E3%81%9F%E3%81%AB-%E3%81%AA%E3%81%84
+N3,149,割に,wari ni,"Although, Despite, Rather...for, Unexpectedly, Comparatively, Considering",https://bunpro.jp/grammar_points/%E3%82%8F%E3%82%8A%E3%81%AB
+N3,150,Verb[volitional]とする,verb [volitional] to suru,"Try to, Attempt to, To be about to",https://bunpro.jp/grammar_points/verb-volitional%E3%81%A8%E3%81%99%E3%82%8B
+N3,151,Verb[volitional] + としたが,verb [volitional] + to shitaga,"Tried to ~ but ~, Was about to ~ but ~, Was going to ~ but ~",https://bunpro.jp/grammar_points/verb-volitional-%E3%81%A8%E3%81%97%E3%81%9F%E3%81%8C
+N3,152,言うまでもない ②,iu made mo nai (2),"It goes without saying, It is needless to say, Of course, Obviously",https://bunpro.jp/grammar_points/%E8%A8%80%E3%81%86%E3%81%BE%E3%81%A7%E3%82%82%E3%81%AA%E3%81%842
+N3,153,そうもない,sou mo nai,"Very unlikely to, Does not seem that, Does not appear that",https://bunpro.jp/grammar_points/%E3%81%9D%E3%81%86%E3%82%82%E3%81%AA%E3%81%84
+N3,154,ないことはない,nai koto wa nai,"Is not impossible, It doesn't mean that it isn't",https://bunpro.jp/grammar_points/%E3%81%AA%E3%81%84%E3%81%93%E3%81%A8%E3%81%AF%E3%81%AA%E3%81%84
+N3,155,なんか・なんて,nanka / nante,"Such as, Things like, Emphasis",https://bunpro.jp/grammar_points/%E3%81%AA%E3%82%93%E3%81%8B-%E3%81%AA%E3%82%93%E3%81%A6
+N3,156,又〜も,mata ~ mo,"Moreover, Additionally, And also, In addition, Furthermore, Or",https://bunpro.jp/grammar_points/%E5%8F%88-%E3%82%82
+N3,157,ついでに,tsuideni,"While you are at it, On the occasion",https://bunpro.jp/grammar_points/%E3%81%A4%E3%81%84%E3%81%A7%E3%81%AB
+N3,158,と共に,to tomo ni,"Together with, At the same time, As well as",https://bunpro.jp/grammar_points/%E3%81%A8%E5%85%B1%E3%81%AB
+N3,159,につれて,ni tsurete,"As…then, In proportion to, (Along) with",https://bunpro.jp/grammar_points/%E3%81%AB%E3%81%A4%E3%82%8C%E3%81%A6
+N3,160,直ちに,tadachini,"At once, Immediately, As soon as",https://bunpro.jp/grammar_points/%E7%9B%B4%E3%81%A1%E3%81%AB
+N3,161,たとたんに,ta totan ni,"The instant or moment, As soon as, Just as",https://bunpro.jp/grammar_points/%E3%81%9F%E3%81%A8%E3%81%9F%E3%82%93%E3%81%AB
+N3,162,おきに,okini,"Repeated at intervals, Every other, Every, At intervals of",https://bunpro.jp/grammar_points/%E3%81%8A%E3%81%8D%E3%81%AB
+N3,163,たびに,tabi ni,"Each time, Every time, Whenever",https://bunpro.jp/grammar_points/%E3%81%9F%E3%81%B3%E3%81%AB
+N3,164,あるいは,arui wa,"Or, Possibly, Maybe, Perhaps, Or possibly",https://bunpro.jp/grammar_points/%E3%81%82%E3%82%8B%E3%81%84%E3%81%AF
+N3,165,ながらも,nagara mo,"But, Even while, Even though, Despite, Although",https://bunpro.jp/grammar_points/%E3%81%AA%E3%81%8C%E3%82%89%E3%82%82
+N3,166,において・における,ni oite / ni okeru,"In, On, At, Regarding, In terms of",https://bunpro.jp/grammar_points/%E3%81%AB%E3%81%8A%E3%81%84%E3%81%A6-%E3%81%AB%E3%81%8A%E3%81%91%E3%82%8B
+N3,167,第一,daiichi,"Start, First (point), Foremost, To begin with",https://bunpro.jp/grammar_points/%E7%AC%AC%E4%B8%80
+N3,168,ますます,masumasu,"Increasingly, More and more, Decreasingly, Less and less, Keep -ing",https://bunpro.jp/grammar_points/%E3%81%BE%E3%81%99%E3%81%BE%E3%81%99
+N3,169,一方だ,ippou da,"More and more, Continue to, Keep on, -er and -er",https://bunpro.jp/grammar_points/%E4%B8%80%E6%96%B9%E3%81%A0
+N3,170,一方で,ippou de,"On the other hand, At the same time, While",https://bunpro.jp/grammar_points/%E4%B8%80%E6%96%B9%E3%81%A7
+N3,171,遂に,tsuini,"Finally, At last",https://bunpro.jp/grammar_points/%E9%81%82%E3%81%AB
+N3,172,すでに,sudeni,"Already, Too late",https://bunpro.jp/grammar_points/%E3%81%99%E3%81%A7%E3%81%AB
+N3,173,ずに,zuni,Without doing,https://bunpro.jp/grammar_points/%E3%81%9A%E3%81%AB
+N3,174,ずにはいられない,zuni wa irarenai,"Cannot help doing something, Cannot resist doing something",https://bunpro.jp/grammar_points/%E3%81%9A%E3%81%AB%E3%81%AF%E3%81%84%E3%82%89%E3%82%8C%E3%81%AA%E3%81%84
+N3,175,なし,nashi,"Without, No",https://bunpro.jp/grammar_points/%E3%81%AA%E3%81%97
+N3,176,あり,ari,"Possibility, To have, With",https://bunpro.jp/grammar_points/%E3%81%82%E3%82%8A
+N3,177,考えられない,kangaerarenai,"Unthinkable, Inconceivable, Unimaginable, Cannot think",https://bunpro.jp/grammar_points/%E8%80%83%E3%81%88%E3%82%89%E3%82%8C%E3%81%AA%E3%81%84
+N3,178,必ずしも,kanarazushimo,"Not always, Not entirely, Not necessarily",https://bunpro.jp/grammar_points/%E5%BF%85%E3%81%9A%E3%81%97%E3%82%82
+N3,179,連用形,ren’youkei,Formal Conjunctive,https://bunpro.jp/grammar_points/%E9%80%A3%E7%94%A8%E5%BD%A2
+N3,180,向き,muki,"Suitable for, Facing",https://bunpro.jp/grammar_points/%E5%90%91%E3%81%8D
+N3,181,向け,muke,"Intended for, Aimed at",https://bunpro.jp/grammar_points/%E5%90%91%E3%81%91
+N3,182,上がる・上げる,agaru / ageru,"Something is finished, To finish something, Something has come to an end, To do something completely, To do something through",https://bunpro.jp/grammar_points/%E4%B8%8A%E3%81%8C%E3%82%8B-%E4%B8%8A%E3%81%92%E3%82%8B
+N3,183,切る,kiru,"To do something completely to the end, Utterly, Resolutely",https://bunpro.jp/grammar_points/%E5%88%87%E3%82%8B
+N3,184,切れない,kirenai,Being unable to finish or complete,https://bunpro.jp/grammar_points/%E5%88%87%E3%82%8C%E3%81%AA%E3%81%84
+N3,185,きり,kiri,"Only, Just, Since",https://bunpro.jp/grammar_points/%E3%81%8D%E3%82%8A
+N3,186,かけ,kake,"Half-, Not yet finished, About to, Begin to",https://bunpro.jp/grammar_points/%E3%81%8B%E3%81%91
+N3,187,にかけて,ni kakete,"Over (a period), From ~ until, Through",https://bunpro.jp/grammar_points/%E3%81%AB%E3%81%8B%E3%81%91%E3%81%A6
+N3,188,たて,tate,"Freshly ~ed, Just ~ed",https://bunpro.jp/grammar_points/%E3%81%9F%E3%81%A6
+N3,189,込む ①,komu (1),"To go into, To put into",https://bunpro.jp/grammar_points/%E8%BE%BC%E3%82%801
+N3,190,込む ②,komu (2),"Remain, To do thoroughly, Deeply, Intensely",https://bunpro.jp/grammar_points/%E8%BE%BC%E3%82%802
+N3,191,ふりをする,furi o suru,"To pretend, To act as if",https://bunpro.jp/grammar_points/%E3%81%B5%E3%82%8A%E3%82%92%E3%81%99%E3%82%8B
+N3,192,できれば・できたら,dekireba / dekitara,If possible,https://bunpro.jp/grammar_points/%E3%81%A7%E3%81%8D%E3%82%8C%E3%81%B0-%E3%81%A7%E3%81%8D%E3%81%9F%E3%82%89
+N3,193,でよければ,de yokereba,"If it is alright, If you don't mind, If you would like, If possible",https://bunpro.jp/grammar_points/%E3%81%A7%E3%82%88%E3%81%91%E3%82%8C%E3%81%B0
+N3,194,次第,shidai,As soon as,https://bunpro.jp/grammar_points/%E6%AC%A1%E7%AC%AC
+N3,195,とおり,toori,"In that way, Exactly, Precisely, Just as",https://bunpro.jp/grammar_points/%E3%81%A8%E3%81%8A%E3%82%8A
+N3,196,でもある,demo aru,"Be also, It also is",https://bunpro.jp/grammar_points/%E3%81%A7%E3%82%82%E3%81%82%E3%82%8B
+N3,197,どうしても,doushitemo,"Regardless of, No matter what",https://bunpro.jp/grammar_points/%E3%81%A9%E3%81%86%E3%81%97%E3%81%A6%E3%82%82
+N3,198,もしも～なら・もしも～でも,moshimo ~ nara / moshimo ~ demo,"If, Supposing",https://bunpro.jp/grammar_points/%E3%82%82%E3%81%97%E3%82%82%EF%BD%9E%E3%81%AA%E3%82%89%E3%83%BB%E3%82%82%E3%81%97%E3%82%82%EF%BD%9E%E3%81%A7%E3%82%82
+N3,199,同士,doushi,"Fellow, With each other, Mutually, Between, Among, Together, With",https://bunpro.jp/grammar_points/%E5%90%8C%E5%A3%AB
+N3,200,がたい,gatai,"Hard to, Difficult to",https://bunpro.jp/grammar_points/%E3%81%8C%E3%81%9F%E3%81%84
+N3,201,まさか,masaka,"I never dreamed, Never, No way, Don't tell me, You don't say",https://bunpro.jp/grammar_points/%E3%81%BE%E3%81%95%E3%81%8B
+N3,202,前者は・後者は,zensha wa / kousha wa,"The former ~ the latter, The first ~ the second",https://bunpro.jp/grammar_points/%E5%89%8D%E8%80%85%E3%81%AF-%E5%BE%8C%E8%80%85%E3%81%AF
+N3,203,つい,tsui,"Accidentally, Unconsciously, Against one's better judgement",https://bunpro.jp/grammar_points/%E3%81%A4%E3%81%84
+N3,204,せいで,sei de,"Because of, Due to, Blame",https://bunpro.jp/grammar_points/%E3%81%9B%E3%81%84%E3%81%A7
+N3,205,くせに,kuseni,"Even though, And yet, Despite",https://bunpro.jp/grammar_points/%E3%81%8F%E3%81%9B%E3%81%AB
+N3,206,がち,gachi,"Apt to do, Tend to do, Prone to do",https://bunpro.jp/grammar_points/%E3%81%8C%E3%81%A1
+N3,207,ぎみ,gimi,"Looking, Feeling a little, Touch of, Tending to, Slightly",https://bunpro.jp/grammar_points/%E3%81%8E%E3%81%BF
+N3,208,っぽい,ppoi,"-ish, -like, Characteristic of, Typical of, Tendency to",https://bunpro.jp/grammar_points/%E3%81%A3%E3%81%BD%E3%81%84
+N3,209,っぱなし,ppanashi,"Leaving something in a certain state, Left as is, Keep on -ing",https://bunpro.jp/grammar_points/%E3%81%A3%E3%81%B1%E3%81%AA%E3%81%97
+N3,210,わざわざ,wazawaza,"Expressly, Especially, Go out of one's way, Take the trouble to",https://bunpro.jp/grammar_points/%E3%82%8F%E3%81%96%E3%82%8F%E3%81%96
+N3,211,一体,ittai,"(What) the heck?, (Who) in the world?, (Where) on earth?, (How many) f*ing...",https://bunpro.jp/grammar_points/%E4%B8%80%E4%BD%93
+N3,212,折角,sekkaku,"With trouble, At great pains, Take the trouble, Might as well..., Rare/long-awaited occasion",https://bunpro.jp/grammar_points/%E3%81%9B%E3%81%A3%E3%81%8B%E3%81%8F
+N3,213,っけ,kke,"What is…again?, Was it... that... ?, Did you say...?",https://bunpro.jp/grammar_points/%E3%81%A3%E3%81%91
+N3,214,代わりに,kawari ni,"Instead of, In place of, In exchange for",https://bunpro.jp/grammar_points/%E4%BB%A3%E3%82%8F%E3%82%8A%E3%81%AB
+N3,215,に代わって,ni kawatte,"In place of, On behalf of, To succeed",https://bunpro.jp/grammar_points/%E3%81%AB%E4%BB%A3%E3%82%8F%E3%81%A3%E3%81%A6
+N3,216,どころか,dokoro ka,"Far from, Anything but",https://bunpro.jp/grammar_points/%E3%81%A9%E3%81%93%E3%82%8D%E3%81%8B
+N3,217,という理由で,to iu riyuu de,"For (that) reason; on the grounds of (that), With the reasoning, Under the pretext of, Due to",https://bunpro.jp/grammar_points/%E3%81%A8%E3%81%84%E3%81%86%E7%90%86%E7%94%B1%E3%81%A7
+N3,218,～は～となっている,~ wa ~ to natte iru,"It is (has been), Have/has become, Happen to be, Has been established",https://bunpro.jp/grammar_points/%E3%81%AF-%E3%81%A8%E3%81%AA%E3%81%A3%E3%81%A6%E3%81%84%E3%82%8B
+N3,219,左右する,sayuu suru,"Influence, Impact, Control",https://bunpro.jp/grammar_points/%E5%B7%A6%E5%8F%B3%E3%81%99%E3%82%8B
+N2,1,得る・得る,eru / uru,"Is able to, Can, Possible",https://bunpro.jp/grammar_points/%E5%BE%97%E3%82%8B-%E5%BE%97%E3%82%8B
+N2,2,〜得ない,~enai,"Unable to, Cannot",https://bunpro.jp/grammar_points/%E5%BE%97%E3%81%AA%E3%81%84
+N2,3,ざるを得ない,zaru o enai,"Can't help doing, Have no choice but",https://bunpro.jp/grammar_points/%E3%81%96%E3%82%8B%E3%82%92%E5%BE%97%E3%81%AA%E3%81%84
+N2,4,～ざる,~zaru,"To not ~, Un~",https://bunpro.jp/grammar_points/%E3%81%96%E3%82%8B
+N2,5,つもりで,tsumori de,"With the intention of doing, Instead of..., Act as if or pretend, Believing that..., Thinking that...",https://bunpro.jp/grammar_points/%E3%81%A4%E3%82%82%E3%82%8A%E3%81%A7
+N2,6,どうせ,douse,"Anyhow, At any rate, In any case, I have no doubt that, Probably",https://bunpro.jp/grammar_points/%E3%81%A9%E3%81%86%E3%81%9B
+N2,7,せめて,semete,At least,https://bunpro.jp/grammar_points/%E3%81%9B%E3%82%81%E3%81%A6
+N2,8,どうやら,douyara,"Apparently, Looks Like, Seems like",https://bunpro.jp/grammar_points/%E3%81%A9%E3%81%86%E3%82%84%E3%82%89
+N2,9,よりほかない,yori hoka nai,"To have no choice but, No other way than, Have to",https://bunpro.jp/grammar_points/%E3%82%88%E3%82%8A%E3%81%BB%E3%81%8B%E3%81%AA%E3%81%84
+N2,10,確かに,tashika ni,"Surely, Certainly",https://bunpro.jp/grammar_points/%E7%A2%BA%E3%81%8B%E3%81%AB
+N2,11,一応 ①,ichiō (1),"Just in case, Just to be sure",https://bunpro.jp/grammar_points/%E4%B8%80%E5%BF%9C1
+N2,12,一応 ②,ichiō (2),"more or less, for the time being, tentatively・roughly",https://bunpro.jp/grammar_points/%E4%B8%80%E5%BF%9C2
+N2,13,に相違ない,ni sōi nai,"Without a doubt, Certainly, Surely, Not mistaken",https://bunpro.jp/grammar_points/%E3%81%AB%E7%9B%B8%E9%81%95%E3%81%AA%E3%81%84
+N2,14,万が一,mangaichi,"Just in case, In the worst-case scenario, In the unlikely event, By any chance",https://bunpro.jp/grammar_points/%E4%B8%87%E3%81%8C%E4%B8%80
+N2,15,ようがない・ようもない,you ga nai / you mo nai,"There's no way to, It's impossible to",https://bunpro.jp/grammar_points/%E3%82%88%E3%81%86%E3%81%8C%E3%81%AA%E3%81%84%E3%83%BB%E3%82%88%E3%81%86%E3%82%82%E3%81%AA%E3%81%84
+N2,16,にほかならない,ni hokanaranai,"Nothing but, None other than, Simply",https://bunpro.jp/grammar_points/%E3%81%AB%E3%81%BB%E3%81%8B%E3%81%AA%E3%82%89%E3%81%AA%E3%81%84
+N2,17,っこない,kkonai,"There is no chance of, There is no way of, Impossible",https://bunpro.jp/grammar_points/%E3%81%A3%E3%81%93%E3%81%AA%E3%81%84
+N2,18,それなら,sorenara,"Then, If that's the case",https://bunpro.jp/grammar_points/%E3%81%9D%E3%82%8C%E3%81%AA%E3%82%89
+N2,19,ものなら①,mono nara (1),"If, If one could, If something would be possible",https://bunpro.jp/grammar_points/%E3%82%82%E3%81%AE%E3%81%AA%E3%82%89%E2%91%A0
+N2,20,～を～に任せる,~o ~ ni makaseru,"Leave 〜 up to, Entrust 〜 to",https://bunpro.jp/grammar_points/%E3%82%92-%E3%81%AB%E4%BB%BB%E3%81%9B%E3%82%8B
+N2,21,活かす,ikasu,"To make use of (something), To take full advantage of, To capitalize on, To leverage (skills), Bring out (the quality of)",https://bunpro.jp/grammar_points/%E6%B4%BB%E3%81%8B%E3%81%99
+N2,22,おおよそ,ooyoso,"Approximately, Roughly, About",https://bunpro.jp/grammar_points/%E3%81%8A%E3%81%8A%E3%82%88%E3%81%9D
+N2,23,まい,mai,"Won't, Intend not to, Probably not",https://bunpro.jp/grammar_points/%E3%81%BE%E3%81%84
+N2,24,上,ue,From the standpoint of,https://bunpro.jp/grammar_points/%E4%B8%8A
+N2,25,上に,ue ni,"As well, Besides, In addition to",https://bunpro.jp/grammar_points/%E4%B8%8A%E3%81%AB
+N2,26,以上 ②,ijou (2),"Since, Now that, As long as, If",https://bunpro.jp/grammar_points/%E4%BB%A5%E4%B8%8A2
+N2,27,以上に,ijou ni,"More than, No less than, Even more",https://bunpro.jp/grammar_points/%E4%BB%A5%E4%B8%8A%E3%81%AB
+N2,28,途中に・途中で,tochuu ni / tochuu de,"On the way, Partway, In the middle of",https://bunpro.jp/grammar_points/%E9%80%94%E4%B8%AD%E3%81%AB%E3%83%BB%E9%80%94%E4%B8%AD%E3%81%A7
+N2,29,中を,naka o,"In, On, Into, Inside of",https://bunpro.jp/grammar_points/%E4%B8%AD%E3%82%92
+N2,30,を中心に,o chuushin ni,"Focused on, Centered on or around, Mainly, Most notably",https://bunpro.jp/grammar_points/%E3%82%92%E4%B8%AD%E5%BF%83%E3%81%AB
+N2,31,その上,sono ue,"Besides, In addition, Furthermore",https://bunpro.jp/grammar_points/%E3%81%9D%E3%81%AE%E4%B8%8A
+N2,32,上は,ue wa,"Once, Since, Now that, As long as",https://bunpro.jp/grammar_points/%E4%B8%8A%E3%81%AF
+N2,33,の下で,no shita de,"Under, Under the supervision of, On the basis of",https://bunpro.jp/grammar_points/%E3%81%AE%E4%B8%8B%E3%81%A7
+N2,34,後(の) Noun,ato (no) noun,"…left, Rest, Remaining, In, …to, …else",https://bunpro.jp/grammar_points/%E5%BE%8C-%E3%81%AEnoun
+N2,35,手前,temae,"Before, In front of, From one's standpoint or side",https://bunpro.jp/grammar_points/%E6%89%8B%E5%89%8D
+N2,36,を巡って,o megutte,"Concerning, In regard to, About, (Split) over",https://bunpro.jp/grammar_points/%E3%82%92%E5%B7%A1%E3%81%A3%E3%81%A6
+N2,37,にわたって,ni watatte,"Across, Throughout, Extends, Over (a period of time or range)",https://bunpro.jp/grammar_points/%E3%81%AB%E3%82%8F%E3%81%9F%E3%81%A3%E3%81%A6
+N2,38,に沿って,ni sotte,"Along, In accordance with, In line with",https://bunpro.jp/grammar_points/%E3%81%AB%E6%B2%BF%E3%81%A3%E3%81%A6
+N2,39,た末・の末,ta sue / no sue,"After, As a conclusion of",https://bunpro.jp/grammar_points/%E3%81%9F%E6%9C%AB-%E3%81%AE%E6%9C%AB
+N2,40,にしたがって,ni shitagatte,"As, Following, As then, According to, In accordance with",https://bunpro.jp/grammar_points/%E3%81%AB%E3%81%97%E3%81%9F%E3%81%8C%E3%81%A3%E3%81%A6
+N2,41,に伴って・に伴い,ni tomonatte / ni tomonai,"As, Due, Along with, Hand-in-hand with, Resulted in, Be consequent upon",https://bunpro.jp/grammar_points/%E3%81%AB%E4%BC%B4%E3%81%A3%E3%81%A6-%E3%81%AB%E4%BC%B4%E3%81%84
+N2,42,につき,ni tsuki,"Due to, On account of, Each or every",https://bunpro.jp/grammar_points/%E3%81%AB%E3%81%A4%E3%81%8D
+N2,43,につけ,ni tsuke,"Whenever, Every time something happens",https://bunpro.jp/grammar_points/%E3%81%AB%E3%81%A4%E3%81%91
+N2,44,にかかわる,ni kakawaru,"To relate to, To have to do with, Concerning, Depends on",https://bunpro.jp/grammar_points/%E3%81%AB%E3%81%8B%E3%81%8B%E3%82%8F%E3%82%8B
+N2,45,に向かって・に向けて,ni mukatte / ni mukete,"Towards, To face, To head to",https://bunpro.jp/grammar_points/%E3%81%AB%E5%90%91%E3%81%8B%E3%81%A3%E3%81%A6-%E3%81%AB%E5%90%91%E3%81%91%E3%81%A6
+N2,46,が気になる,ga ki ni naru,"To be interested in, To be concerned about",https://bunpro.jp/grammar_points/%E3%81%8C%E6%B0%97%E3%81%AB%E3%81%AA%E3%82%8B
+N2,47,に気をつける,ni ki o tsukeru,"Take care, Be careful, Pay attention, Make sure, Watch out",https://bunpro.jp/grammar_points/%E3%81%AB%E6%B0%97%E3%82%92%E3%81%A4%E3%81%91%E3%82%8B
+N2,48,も構わず,mo kamawazu,Without worrying about,https://bunpro.jp/grammar_points/%E3%82%82%E3%81%8B%E3%81%BE%E3%82%8F%E3%81%9A
+N2,49,かねる,kaneru,"Cannot, Be unable to, Hard to, Hesitant to",https://bunpro.jp/grammar_points/%E3%81%8B%E3%81%AD%E3%82%8B
+N2,50,かねない,kanenai,"Might, Could be, Capable of, Possible",https://bunpro.jp/grammar_points/%E3%81%8B%E3%81%AD%E3%81%AA%E3%81%84
+N2,51,を除いて,o nozoite,"Except, With the exception of, Unless",https://bunpro.jp/grammar_points/%E3%82%92%E9%99%A4%E3%81%84%E3%81%A6
+N2,52,にかかわらず,ni kakawarazu,"Regardless of, Whether or, No matter, With or without",https://bunpro.jp/grammar_points/%E3%81%AB%E3%81%8B%E3%81%8B%E3%82%8F%E3%82%89%E3%81%9A
+N2,53,にもかかわらず,ni mo kakawarazu,"Despite, In spite of, Regardless, Nevertheless",https://bunpro.jp/grammar_points/%E3%81%AB%E3%82%82%E3%81%8B%E3%81%8B%E3%82%8F%E3%82%89%E3%81%9A
+N2,54,に限って,ni kagitte,"Particularly when, Those who, Only when",https://bunpro.jp/grammar_points/%E3%81%AB%E9%99%90%E3%81%A3%E3%81%A6
+N2,55,に限らず,ni kagirazu,"Not just, Not only… but also",https://bunpro.jp/grammar_points/%E3%81%AB%E9%99%90%E3%82%89%E3%81%9A
+N2,56,なお①,nao (1),"Still, Even, Yet",https://bunpro.jp/grammar_points/%E3%81%AA%E3%81%8A1
+N2,57,なお②,nao (2),"In addition, Incidentally, Furthermore, Moreover",https://bunpro.jp/grammar_points/%E3%81%AA%E3%81%8A2
+N2,58,限り,kagiri,"As long as, While… is the case, Limited to",https://bunpro.jp/grammar_points/%E9%99%90%E3%82%8A
+N2,59,次第だ・次第で,shidai da / shidai de,"Depending on, So",https://bunpro.jp/grammar_points/%E6%AC%A1%E7%AC%AC%E3%81%A0-%E6%AC%A1%E7%AC%AC%E3%81%A7
+N2,60,～てこそ,~te koso,"Only if, Because, By, Unless, Until",https://bunpro.jp/grammar_points/-%E3%81%A6%E3%81%93%E3%81%9D
+N2,61,を問わず,o towazu,"Regardless of, Whether or not, No matter, With or without",https://bunpro.jp/grammar_points/%E3%82%92%E5%95%8F%E3%82%8F%E3%81%9A
+N2,62,よりしかたがない,yori shikataganai,"There is no choice but, Can't be helped, Inevitable",https://bunpro.jp/grammar_points/%E3%82%88%E3%82%8A%E3%81%97%E3%81%8B%E3%81%9F%E3%81%8C%E3%81%AA%E3%81%84
+N2,63,に越したことはない,ni koshita koto wa nai,"There is nothing better than, It is the best, Would be the best",https://bunpro.jp/grammar_points/%E3%81%AB%E8%B6%8A%E3%81%97%E3%81%9F%E3%81%93%E3%81%A8%E3%81%AF%E3%81%AA%E3%81%84
+N2,64,要するに,yousuruni,"To sum up, In summary, In short",https://bunpro.jp/grammar_points/%E8%A6%81%E3%81%99%E3%82%8B%E3%81%AB
+N2,65,てからでないと,te kara denai to,"(Not) unless ~ cannot, (Not) until ~ cannot",https://bunpro.jp/grammar_points/%E3%81%A6%E3%81%8B%E3%82%89%E3%81%A7%E3%81%AA%E3%81%84%E3%81%A8
+N2,66,なくはない,naku wa nai,"It's not that…, Kind of, might, Slightly, Somewhat, In some respects",https://bunpro.jp/grammar_points/%E3%81%AA%E3%81%8F%E3%81%AF%E3%81%AA%E3%81%84
+N2,67,ないことには～ない,nai koto ni wa ~ nai,Unless you do something,https://bunpro.jp/grammar_points/%E3%81%AA%E3%81%84%E3%81%93%E3%81%A8%E3%81%AB%E3%81%AF-%E3%81%AA%E3%81%84
+N2,68,ないではいられない,naide wa irarenai,"Cannot help doing something, Cannot resist doing something",https://bunpro.jp/grammar_points/%E3%81%AA%E3%81%84%E3%81%A7%E3%81%AF%E3%81%84%E3%82%89%E3%82%8C%E3%81%AA%E3%81%84
+N2,69,ねばならない,neba naranai,"Must, Have to, Should",https://bunpro.jp/grammar_points/%E3%81%AD%E3%81%B0%E3%81%AA%E3%82%89%E3%81%AA%E3%81%84
+N2,70,たまえ,tamae,"(Please) do!, Ask to, Beg to, (Order somebody to do something)",https://bunpro.jp/grammar_points/%E3%81%9F%E3%81%BE%E3%81%88
+N2,71,～のうち(で),~ no uchi (de),"Of the, Among(st)",https://bunpro.jp/grammar_points/-%E3%81%AE%E3%81%86%E3%81%A1-%E3%81%A7
+N2,72,つつ,tsutsu,"While, And",https://bunpro.jp/grammar_points/%E3%81%A4%E3%81%A4
+N2,73,つつ(も),tsutsu (mo),"Even while ~ing, Even though ~ing, Despite ~ing, Although ~ing",https://bunpro.jp/grammar_points/%E3%81%A4%E3%81%A4-%E3%82%82
+N2,74,に際して,ni saishite,"On the occasion of, At the time of",https://bunpro.jp/grammar_points/%E3%81%AB%E9%9A%9B%E3%81%97%E3%81%A6
+N2,75,際に,sai ni,"When, At the time of, In case of, On the occasion of",https://bunpro.jp/grammar_points/%E9%9A%9B%E3%81%AB
+N2,76,にあたり・にあたって,ni atari / ni atatte,"When, When doing something, On the occasion, At the time",https://bunpro.jp/grammar_points/%E3%81%AB%E3%81%82%E3%81%9F%E3%82%8A-%E3%81%AB%E3%81%82%E3%81%9F%E3%81%A3%E3%81%A6
+N2,77,を契機に,o keiki ni,"Lead to, As a good opportunity to, As a result of, As a trigger",https://bunpro.jp/grammar_points/%E3%82%92%E5%A5%91%E6%A9%9F%E3%81%AB
+N2,78,つつある,tsutsu aru,"-ing, Be -ing",https://bunpro.jp/grammar_points/%E3%81%A4%E3%81%A4%E3%81%82%E3%82%8B
+N2,79,～ところに・～ところへ,~ tokoro ni / ~ tokoro e,"At the time, When, While, Timing",https://bunpro.jp/grammar_points/%EF%BD%9E%E3%81%A8%E3%81%93%E3%82%8D%E3%81%AB%E3%83%BB%EF%BD%9E%E3%81%A8%E3%81%93%E3%82%8D%E3%81%B8
+N2,80,か〜ないかのうちに,ka ~ nai ka no uchi ni,"Right after, As soon as, Just when, Barely",https://bunpro.jp/grammar_points/%E3%81%8B-%E3%81%AA%E3%81%84%E3%81%8B%E3%81%AE%E3%81%86%E3%81%A1%E3%81%AB
+N2,81,がけに,gake ni,"On the way to, As you go",https://bunpro.jp/grammar_points/%E3%81%8C%E3%81%91%E3%81%AB
+N2,82,ていては,te ite wa,"If one keeps doing something, When, If something is...",https://bunpro.jp/grammar_points/%E3%81%A6%E3%81%84%E3%81%A6%E3%81%AF
+N2,83,ところだった ②,tokoro datta (2),"Was just about to do something, Was in the middle of...",https://bunpro.jp/grammar_points/%E3%81%A8%E3%81%93%E3%82%8D%E3%81%A0%E3%81%A3%E3%81%9F2
+N2,84,どころではない,dokoro de wa nai,"This is not the time for…, Far from, Out of the question",https://bunpro.jp/grammar_points/%E3%81%A9%E3%81%93%E3%82%8D%E3%81%A7%E3%81%AF%E3%81%AA%E3%81%84
+N2,85,ぶりに,buri ni,"For the first time in, Haven't done for some time",https://bunpro.jp/grammar_points/%E3%81%B6%E3%82%8A%E3%81%AB
+N2,86,ては,te wa,"If, With, Since, Because",https://bunpro.jp/grammar_points/%E3%81%A6%E3%81%AF
+N2,87,ては〜ては,te wa ~ te wa,"Repeating action, If, Since",https://bunpro.jp/grammar_points/%E3%81%A6%E3%81%AF-%E3%81%A6%E3%81%AF
+N2,88,も又,mo mata,"Too, Also (with more emphasis than も alone), Again",https://bunpro.jp/grammar_points/%E3%82%82%E5%8F%88
+N2,89,結果・の結果,kekka / no kekka,As a result of,https://bunpro.jp/grammar_points/%E7%B5%90%E6%9E%9C%E3%83%BB%E3%81%AE%E7%B5%90%E6%9E%9C
+N2,90,以来,irai,"Since, Henceforth",https://bunpro.jp/grammar_points/%E4%BB%A5%E6%9D%A5
+N2,91,に先立ち,ni sakidachi,"Before, Prior to, In preference over",https://bunpro.jp/grammar_points/%E3%81%AB%E5%85%88%E7%AB%8B%E3%81%A1
+N2,92,はたして,hatashite,"Wonder if ~ (really)?, Wonder how ~ (actually)?, Sure enough, As expected",https://bunpro.jp/grammar_points/%E3%81%AF%E3%81%9F%E3%81%97%E3%81%A6
+N2,93,甲斐がある,gai ga aru,"To be (not) worth, To (not) pay off",https://bunpro.jp/grammar_points/%E7%94%B2%E6%96%90%E3%81%8C%E3%81%82%E3%82%8B
+N2,94,やがて,yagate,"Before long, All too soon, In the end, Eventually",https://bunpro.jp/grammar_points/%E3%82%84%E3%81%8C%E3%81%A6
+N2,95,したがって,shitagatte,"Therefore, Thus, As a result",https://bunpro.jp/grammar_points/%E3%81%97%E3%81%9F%E3%81%8C%E3%81%A3%E3%81%A6
+N2,96,あげく,ageku,"After, In the end, After all, Eventually",https://bunpro.jp/grammar_points/%E3%81%82%E3%81%92%E3%81%8F
+N2,97,きっかけ,kikkake,"Lead to, Because of, As a start or trigger of, An opportunity",https://bunpro.jp/grammar_points/%E3%81%8D%E3%81%A3%E3%81%8B%E3%81%91
+N2,98,にかけては,ni kakete wa,"When it comes to, Regarding, Concerning",https://bunpro.jp/grammar_points/%E3%81%AB%E3%81%8B%E3%81%91%E3%81%A6%E3%81%AF
+N2,99,とっくに,tokkuni,"Already, A long time ago, Long ago",https://bunpro.jp/grammar_points/%E3%81%A8%E3%81%A3%E3%81%8F%E3%81%AB
+N2,100,未だに,imada ni,"Still, Not yet, Even now",https://bunpro.jp/grammar_points/%E6%9C%AA%E3%81%A0%E3%81%AB
+N2,101,をもとに,o moto ni,"Based on, From, According to",https://bunpro.jp/grammar_points/%E3%82%92%E3%82%82%E3%81%A8%E3%81%AB
+N2,102,からには,karaniba,"As long as, Since, Given",https://bunpro.jp/grammar_points/%E3%81%8B%E3%82%89%E3%81%AB%E3%81%AF
+N2,103,いつの間にか,itsu no ma ni ka,"Suddenly, Unnoticed, Without noticing, Too soon",https://bunpro.jp/grammar_points/%E3%81%84%E3%81%A4%E3%81%AE%E9%96%93%E3%81%AB%E3%81%8B
+N2,104,一旦,ittan,"Once …, If … for a short time, Temporarily (stop), For now or the time being",https://bunpro.jp/grammar_points/%E4%B8%80%E6%97%A6
+N2,105,はもとより,wa motoyori,"Not only... but also, Let alone, Of course,",https://bunpro.jp/grammar_points/%E3%81%AF%E3%82%82%E3%81%A8%E3%82%88%E3%82%8A
+N2,106,そうにない,sou ni nai,"Unlikely to, Showing no signs of",https://bunpro.jp/grammar_points/%E3%81%9D%E3%81%86%E3%81%AB%E3%81%AA%E3%81%84
+N2,107,に反して,ni hanshite,"Go against, Contrary to",https://bunpro.jp/grammar_points/%E3%81%AB%E5%8F%8D%E3%81%97%E3%81%A6
+N2,108,逆に,gyaku ni,On the contrary,https://bunpro.jp/grammar_points/%E9%80%86%E3%81%AB
+N2,109,反面,hanmen,"While, On the other hand, Although, However, On the flip side",https://bunpro.jp/grammar_points/%E5%8F%8D%E9%9D%A2
+N2,110,抜く,nuku,"All~, Completely, See through, Overcome, To the bitter end",https://bunpro.jp/grammar_points/%E6%8A%9C%E3%81%8F
+N2,111,抜きで,nuki de,"Without, Unless",https://bunpro.jp/grammar_points/%E6%8A%9C%E3%81%8D%E3%81%A7
+N2,112,いよいよ,iyoiyo,"At last, Finally, More and more",https://bunpro.jp/grammar_points/%E3%81%84%E3%82%88%E3%81%84%E3%82%88
+N2,113,ずに済む,zuni sumu,"Get by without doing something, To get away with",https://bunpro.jp/grammar_points/%E3%81%9A%E3%81%AB%E6%B8%88%E3%82%80
+N2,114,に応じて,ni oujite,"Depending or based on, According to, In response to, Suitable for or to",https://bunpro.jp/grammar_points/%E3%81%AB%E5%BF%9C%E3%81%98%E3%81%A6
+N2,115,を通じて・を通して,o tsuujite / o tooshite,"Through, Via, Throughout",https://bunpro.jp/grammar_points/%E3%82%92%E9%80%9A%E3%81%98%E3%81%A6-%E3%82%92%E9%80%9A%E3%81%97%E3%81%A6
+N2,116,に応えて,ni kotaete,"In response to, Meet",https://bunpro.jp/grammar_points/%E3%81%AB%E5%BF%9C%E3%81%88%E3%81%A6
+N2,117,それとも,soretomo,"Or, Or else, Rather",https://bunpro.jp/grammar_points/%E3%81%9D%E3%82%8C%E3%81%A8%E3%82%82
+N2,118,にしたら,ni shitara,From the point of view of,https://bunpro.jp/grammar_points/%E3%81%AB%E3%81%97%E3%81%9F%E3%82%89
+N2,119,にしても～にしても,ni shitemo ~ ni shitemo,Regardless of whether,https://bunpro.jp/grammar_points/%E3%81%AB%E3%81%97%E3%81%A6%E3%82%82-%E3%81%AB%E3%81%97%E3%81%A6%E3%82%82
+N2,120,としては,toshite wa,"As a, For a, As for",https://bunpro.jp/grammar_points/%E3%81%A8%E3%81%97%E3%81%A6%E3%81%AF
+N2,121,としても,toshite mo,"Even if (we assume), Assuming, Also as",https://bunpro.jp/grammar_points/%E3%81%A8%E3%81%97%E3%81%A6%E3%82%82
+N2,122,それにしても,sore ni shitemo,"Nevertheless, Even so",https://bunpro.jp/grammar_points/%E3%81%9D%E3%82%8C%E3%81%AB%E3%81%97%E3%81%A6%E3%82%82
+N2,123,ぬ,nu,"Classical negative, Classical verb [ない]",https://bunpro.jp/grammar_points/%E3%81%AC
+N2,124,ことなく,koto naku,Without ~ing,https://bunpro.jp/grammar_points/%E3%81%93%E3%81%A8%E3%81%AA%E3%81%8F
+N2,125,にて,nite,"In, At, With, Using, By",https://bunpro.jp/grammar_points/%E3%81%AB%E3%81%A6
+N2,126,には,ni wa,"In order to, In regard to, For",https://bunpro.jp/grammar_points/%E3%81%AB%E3%81%AF
+N2,127,思うように,omou you ni,"As one hopes, As desired, As one thought",https://bunpro.jp/grammar_points/%E6%80%9D%E3%81%86%E3%82%88%E3%81%86%E3%81%AB
+N2,128,かと思ったら・かと思うと,ka to omottara / ka to omou to,"Then again, Just when I thought, No sooner than",https://bunpro.jp/grammar_points/%E3%81%8B%E3%81%A8%E6%80%9D%E3%81%A3%E3%81%9F%E3%82%89-%E3%81%8B%E3%81%A8%E6%80%9D%E3%81%86%E3%81%A8
+N2,129,というものでもない,to iu mono demo nai,"There is no guarantee that…, Not necessarily",https://bunpro.jp/grammar_points/%E3%81%A8%E3%81%84%E3%81%86%E3%82%82%E3%81%AE%E3%81%A7%E3%82%82%E3%81%AA%E3%81%84
+N2,130,と考えられる,to kangaerareru,"Can be considered as, Is thought to be, One can think that, It is conceivable that",https://bunpro.jp/grammar_points/%E3%81%A8%E8%80%83%E3%81%88%E3%82%89%E3%82%8C%E3%82%8B
+N2,131,という点から考えると,to iu ten kara kangaeru to,"From the standpoint of, From the perspective of, From the viewpoint of, Think in terms of, Viewed from the angle of",https://bunpro.jp/grammar_points/%E3%81%A8%E3%81%84%E3%81%86%E7%82%B9%E3%81%8B%E3%82%89%E8%80%83%E3%81%88%E3%82%8B%E3%81%A8
+N2,132,ということは,to iu koto wa,"That means, That is to say",https://bunpro.jp/grammar_points/%E3%81%A8%E3%81%84%E3%81%86%E3%81%93%E3%81%A8%E3%81%AF
+N2,133,ふうに,fuu ni,"~ way, In a way that suggests, Like ~",https://bunpro.jp/grammar_points/%E3%81%B5%E3%81%86%E3%81%AB
+N2,134,という風に,to iu fuu ni,"As if to say, As if to suggest that, In such a way that, Things like",https://bunpro.jp/grammar_points/%E3%81%A8%E3%81%84%E3%81%86%E9%A2%A8%E3%81%AB
+N2,135,ものの,mono no,"Although, But, Even Though",https://bunpro.jp/grammar_points/%E3%82%82%E3%81%AE%E3%81%AE
+N2,136,というものだ,to iu mono da,"Speaker's impression, Criticism or conclusion",https://bunpro.jp/grammar_points/%E3%81%A8%E3%81%84%E3%81%86%E3%82%82%E3%81%AE%E3%81%A0
+N2,137,から見ると,kara miru to,"From the point of view of, By the look of",https://bunpro.jp/grammar_points/%E3%81%8B%E3%82%89%E8%A6%8B%E3%82%8B%E3%81%A8
+N2,138,ところを見ると,tokoro o miru to,"Judging from, Seeing that",https://bunpro.jp/grammar_points/%E3%81%A8%E3%81%93%E3%82%8D%E3%82%92%E8%A6%8B%E3%82%8B%E3%81%A8
+N2,139,からすると・からすれば,kara suru to / kara sureba,"Judging from, Considering",https://bunpro.jp/grammar_points/%E3%81%8B%E3%82%89%E3%81%99%E3%82%8B%E3%81%A8-%E3%81%8B%E3%82%89%E3%81%99%E3%82%8C%E3%81%B0
+N2,140,からして,kara shite,"Even..., Judging from, Based on",https://bunpro.jp/grammar_points/%E3%81%8B%E3%82%89%E3%81%97%E3%81%A6
+N2,141,からといって,kara to itte,Just because,https://bunpro.jp/grammar_points/%E3%81%8B%E3%82%89%E3%81%A8%E3%81%84%E3%81%A3%E3%81%A6
+N2,142,そういえば,sou ieba,"Speaking of which, By the way, Come to think of it",https://bunpro.jp/grammar_points/%E3%81%9D%E3%81%86%E3%81%84%E3%81%88%E3%81%B0
+N2,143,お～願う,o ~ negau,"Please, Could you please",https://bunpro.jp/grammar_points/%E3%81%8A-%E9%A1%98%E3%81%86
+N2,144,とか,toka,"I heard that… something like, They said ... or something",https://bunpro.jp/grammar_points/%E3%81%A8%E3%81%8B
+N2,145,〜ようではないか,~ you de wa nai ka,"Let's do something, Why don't we",https://bunpro.jp/grammar_points/%E3%82%88%E3%81%86%E3%81%A7%E3%81%AF%E3%81%AA%E3%81%84%E3%81%8B
+N2,146,かのようだ,ka no you da,"As if, Just like",https://bunpro.jp/grammar_points/%E3%81%8B%E3%81%AE%E3%82%88%E3%81%86%E3%81%A0
+N2,147,のではないだろうか,no de wa nai darou ka,"I think ... isn't it?, It might be that..., Don't you agree?",https://bunpro.jp/grammar_points/%E3%81%AE%E3%81%A7%E3%81%AF%E3%81%AA%E3%81%84%E3%81%A0%E3%82%8D%E3%81%86%E3%81%8B
+N2,148,て当然だ,te touzen da,"Natural, As a matter of course",https://bunpro.jp/grammar_points/%E3%81%A6%E5%BD%93%E7%84%B6%E3%81%A0
+N2,149,のも当然だ,no mo touzen da,"It is only natural that, It is no wonder",https://bunpro.jp/grammar_points/%E3%81%AE%E3%82%82%E5%BD%93%E7%84%B6%E3%81%A0
+N2,150,たった(の),tatta (no),"Only, Just, No more than",https://bunpro.jp/grammar_points/%E3%81%9F%E3%81%A3%E3%81%9F-%E3%81%AE
+N2,151,恐れがある,osore ga aru,"There is a risk or fear that, Be in danger of, Possibility of",https://bunpro.jp/grammar_points/%E6%81%90%E3%82%8C%E3%81%8C%E3%81%82%E3%82%8B
+N2,152,おそらく,osoraku,"Probably, Perhaps, (Most) likely, (I) fear that",https://bunpro.jp/grammar_points/%E3%81%8A%E3%81%9D%E3%82%89%E3%81%8F
+N2,153,ものか,mono ka,"Definitely not, Absolutely not, Impossible, Do you really think~?",https://bunpro.jp/grammar_points/%E3%82%82%E3%81%AE%E3%81%8B
+N2,154,おまけに,omake ni,"In addition, On top of that, What is more, To make matters worse",https://bunpro.jp/grammar_points/%E3%81%8A%E3%81%BE%E3%81%91%E3%81%AB
+N2,155,に決まっている,ni kimatte iru,"Surely, Bound to, Certainly, Be decided",https://bunpro.jp/grammar_points/%E3%81%AB%E6%B1%BA%E3%81%BE%E3%81%A3%E3%81%A6%E3%81%84%E3%82%8B
+N2,156,ことになっている,koto ni natte iru,"To be expected to, To be scheduled to",https://bunpro.jp/grammar_points/%E3%81%93%E3%81%A8%E3%81%AB%E3%81%AA%E3%81%A3%E3%81%A6%E3%81%84%E3%82%8B
+N2,157,気,ki,"Feel like ~, Spirit",https://bunpro.jp/grammar_points/%E6%B0%97
+N2,158,げ,ge,"Seemingly, Giving appearance of, [Expresses emotions or feelings]",https://bunpro.jp/grammar_points/%E3%81%92
+N2,159,ことだから,koto dakara,It is exactly because,https://bunpro.jp/grammar_points/%E3%81%93%E3%81%A8%E3%81%A0%E3%81%8B%E3%82%89
+N2,160,ものだから,mono dakara,"Because, The reason is",https://bunpro.jp/grammar_points/%E3%82%82%E3%81%AE%E3%81%A0%E3%81%8B%E3%82%89
+N2,161,ものですから・もので,mono desu kara / mono de,"Because, My excuse is, My explanation is",https://bunpro.jp/grammar_points/%E3%82%82%E3%81%AE%E3%81%A7%E3%81%99%E3%81%8B%E3%82%89-%E3%82%82%E3%81%AE%E3%81%A7
+N2,162,ものがある,mono ga aru,"Strong judgement, There is something, Feel strongly that",https://bunpro.jp/grammar_points/%E3%82%82%E3%81%AE%E3%81%8C%E3%81%82%E3%82%8B
+N2,163,傾向がある,keikou ga aru,"Tendency, Trend, Inclination",https://bunpro.jp/grammar_points/%E5%82%BE%E5%90%91%E3%81%8C%E3%81%82%E3%82%8B
+N2,164,てしょうがない,te shouganai,"Extremely, Very, Really, It can't be helped",https://bunpro.jp/grammar_points/%E3%81%A6%E3%81%97%E3%82%87%E3%81%86%E3%81%8C%E3%81%AA%E3%81%84
+N2,165,だけましだ,dake mashi da,"At least, It's better than..., One should feel grateful for",https://bunpro.jp/grammar_points/%E3%81%A0%E3%81%91%E3%81%BE%E3%81%97%E3%81%A0
+N2,166,幸い・幸いなことに,saiwai / saiwai na koto ni,"Luckily, Fortunately",https://bunpro.jp/grammar_points/%E5%B9%B8%E3%81%84-%E5%B9%B8%E3%81%84%E3%81%AA%E3%81%93%E3%81%A8%E3%81%AB
+N2,167,ようでは・ようじゃ,you de wa / you ja,"If, If it is true that",https://bunpro.jp/grammar_points/%E3%82%88%E3%81%86%E3%81%A7%E3%81%AF-%E3%82%88%E3%81%86%E3%81%98%E3%82%83
+N2,168,さすが,sasuga,"as one would expect, only natural, that is just like..., even",https://bunpro.jp/grammar_points/%E3%81%95%E3%81%99%E3%81%8C
+N2,169,ことは〜が,koto wa ~ ga,"It is true...but, although, but",https://bunpro.jp/grammar_points/%E3%81%93%E3%81%A8%E3%81%AF-%E3%81%8C
+N2,170,更に,sarani,"Even more or further, Again, More and more",https://bunpro.jp/grammar_points/%E3%81%95%E3%82%89%E3%81%AB
+N2,171,精々,seizei,"(At) most , (At) best, No more than, Barely",https://bunpro.jp/grammar_points/%E7%B2%BE%E3%80%85
+N2,172,僅かに,wazuka ni,"Only, Slightly, A little, Barely, Merely",https://bunpro.jp/grammar_points/%E5%83%85%E3%81%8B%E3%81%AB
+N2,173,および,oyobi,"And, As well as",https://bunpro.jp/grammar_points/%E3%81%8A%E3%82%88%E3%81%B3
+N2,174,たちまち,tachimachi,"Immediately, Quickly, Suddenly, In a moment or flash",https://bunpro.jp/grammar_points/%E3%81%9F%E3%81%A1%E3%81%BE%E3%81%A1
+N2,175,いきなり,ikinari,"For no reason, Suddenly, All of a sudden",https://bunpro.jp/grammar_points/%E3%81%84%E3%81%8D%E3%81%AA%E3%82%8A
+N2,176,といった,to itta,"Such as, Like, So much as",https://bunpro.jp/grammar_points/%E3%81%A8%E3%81%84%E3%81%A3%E3%81%9F
+N2,177,を込めて,o komete,"Full of, Filled with, With ～",https://bunpro.jp/grammar_points/%E3%82%92%E8%BE%BC%E3%82%81%E3%81%A6
+N2,178,に加えて,ni kuwaete,"Not only...but also, In addition, Not to mention",https://bunpro.jp/grammar_points/%E3%81%AB%E5%8A%A0%E3%81%88%E3%81%A6
+N2,179,何から何まで,nani kara nani made,"Everything and anything, From A to Z, From head to toe, Everything",https://bunpro.jp/grammar_points/%E4%BD%95%E3%81%8B%E3%82%89%E4%BD%95%E3%81%BE%E3%81%A7
+N2,180,は別として,wa betsu to shite,"Apart from, (Setting) aside, Whether or, Except for, Save for",https://bunpro.jp/grammar_points/%E3%81%AF%E5%88%A5%E3%81%A8%E3%81%97%E3%81%A6
+N2,181,だけに,dake ni,"As might be expected, Because, All the more because, It's only natural",https://bunpro.jp/grammar_points/%E3%81%A0%E3%81%91%E3%81%AB
+N2,182,だけは,dake wa,"To do all that one can, As much or many ~ as one could",https://bunpro.jp/grammar_points/%E3%81%A0%E3%81%91%E3%81%AF
+N2,183,だけあって,dake atte,"Is only natural, …Being the case, Because, As might be expected",https://bunpro.jp/grammar_points/%E3%81%A0%E3%81%91%E3%81%82%E3%81%A3%E3%81%A6
+N2,184,何より,naniyori,"Be glad, Be relieved, Most, Best, Above all else, More than anything",https://bunpro.jp/grammar_points/%E4%BD%95%E3%82%88%E3%82%8A
+N2,185,何といっても,nanto itte mo,"By any account, All the same, No doubt",https://bunpro.jp/grammar_points/%E4%BD%95%E3%81%A8%E3%81%84%E3%81%A3%E3%81%A6%E3%82%82
+N2,186,か何か,ka nanika,"Or something, Or something like that",https://bunpro.jp/grammar_points/%E3%81%8B%E4%BD%95%E3%81%8B
+N2,187,てならない,te naranai,"Very, Extremely, Can't help but do",https://bunpro.jp/grammar_points/%E3%81%A6%E3%81%AA%E3%82%89%E3%81%AA%E3%81%84
+N2,188,のみならず,nominarazu,"Not only...but, Not just...but, What is more",https://bunpro.jp/grammar_points/%E3%81%AE%E3%81%BF%E3%81%AA%E3%82%89%E3%81%9A
+N2,189,それなのに,sore nanoni,"And yet, Despite this",https://bunpro.jp/grammar_points/%E3%81%9D%E3%82%8C%E3%81%AA%E3%81%AE%E3%81%AB
+N2,190,いわゆる,iwayuru,"What is called, So-called, Generally known",https://bunpro.jp/grammar_points/%E3%81%84%E3%82%8F%E3%82%86%E3%82%8B
+N2,191,にすぎない,ni suginai,"No more than, Just, Merely",https://bunpro.jp/grammar_points/%E3%81%AB%E3%81%99%E3%81%8E%E3%81%AA%E3%81%84
+N2,192,も～ば～も,mo ~ ba ~ mo,"…And…, Both ... and ..., ... And ... as well",https://bunpro.jp/grammar_points/%E3%82%82-%E3%81%B0-%E3%82%82
+N2,193,でしかない,de shika nai,"Merely, Nothing but, No more than",https://bunpro.jp/grammar_points/%E3%81%A7%E3%81%97%E3%81%8B%E3%81%AA%E3%81%84
+N2,194,てたまらない,te tamaranai,"Can't help but want to, Very, Extremely",https://bunpro.jp/grammar_points/%E3%81%A6%E3%81%9F%E3%81%BE%E3%82%89%E3%81%AA%E3%81%84
+N2,195,にせよ・にしろ,ni seyo / ni shiro,"Even if, Even though, No matter, Whether… or",https://bunpro.jp/grammar_points/%E3%81%AB%E3%81%9B%E3%82%88-%E3%81%AB%E3%81%97%E3%82%8D
+N2,196,何しろ,nanishiro,"No wonder, After all, In fact, Because, At any rate",https://bunpro.jp/grammar_points/%E4%BD%95%E3%81%97%E3%82%8D
+N2,197,にしろ～にしろ,ni shiro ~ ni shiro,Whether… or,https://bunpro.jp/grammar_points/%E3%81%AB%E3%81%97%E3%82%8D-%E3%81%AB%E3%81%97%E3%82%8D
+N2,198,はともかく,wa tomokaku,"Setting aside, Apart from",https://bunpro.jp/grammar_points/%E3%81%AF%E3%81%A8%E3%82%82%E3%81%8B%E3%81%8F
+N2,199,ならともかく,nara tomokaku,"If it's (A), sure, but (B), Putting aside (A), (B)",https://bunpro.jp/grammar_points/%E3%81%AA%E3%82%89%E3%81%A8%E3%82%82%E3%81%8B%E3%81%8F
+N2,200,やら～やら,yara ~ yara,"Whether or, Things like, And … so on",https://bunpro.jp/grammar_points/%E3%82%84%E3%82%89-%E3%82%84%E3%82%89
+N2,201,しかしながら,shikashinagara,"However, Nevertheless, But",https://bunpro.jp/grammar_points/%E3%81%97%E3%81%8B%E3%81%97%E3%81%AA%E3%81%8C%E3%82%89
+N2,202,ことにはならない,koto ni wa naranai,Just because… doesn't mean…,https://bunpro.jp/grammar_points/%E3%81%93%E3%81%A8%E3%81%AB%E3%81%AF%E3%81%AA%E3%82%89%E3%81%AA%E3%81%84
+N2,203,だけのことはある,dake no koto wa aru,"No wonder, Not surprising that, As expected",https://bunpro.jp/grammar_points/%E3%81%A0%E3%81%91%E3%81%AE%E3%81%93%E3%81%A8%E3%81%AF%E3%81%82%E3%82%8B
+N2,204,てはならない,te wa naranai,"Must not, Cannot, Should not",https://bunpro.jp/grammar_points/%E3%81%A6%E3%81%AF%E3%81%AA%E3%82%89%E3%81%AA%E3%81%84
+N2,205,てはいられない,te wa irarenai,"Can't afford to, Unable to",https://bunpro.jp/grammar_points/%E3%81%A6%E3%81%AF%E3%81%84%E3%82%89%E3%82%8C%E3%81%AA%E3%81%84
+N2,206,陸に～ない,roku ni ~ nai,"Not well or properly, Not much or enough, Barely, Hardly",https://bunpro.jp/grammar_points/%E9%99%B8%E3%81%AB-%E3%81%AA%E3%81%84
+N2,207,しかも,shikamo,"Moreover, Furthermore",https://bunpro.jp/grammar_points/%E3%81%97%E3%81%8B%E3%82%82
+N2,208,てでも,te demo,"Even if I have to, By any or all means, No matter what",https://bunpro.jp/grammar_points/%E3%81%A6%E3%81%A7%E3%82%82
+N2,209,とも,tomo,"Even if, No matter",https://bunpro.jp/grammar_points/%E3%81%A8%E3%82%82
+N2,210,ないわけにはいかない,nai wake ni wa ikanai,"Can't not, No way to avoid",https://bunpro.jp/grammar_points/%E3%81%AA%E3%81%84%E3%82%8F%E3%81%91%E3%81%AB%E3%81%AF%E3%81%84%E3%81%8B%E3%81%AA%E3%81%84
+N2,211,というわけではない,to iu wake de wa nai,"It is not that, It doesn't mean that, It is not always the case",https://bunpro.jp/grammar_points/%E3%81%A8%E3%81%84%E3%81%86%E3%82%8F%E3%81%91%E3%81%A7%E3%81%AF%E3%81%AA%E3%81%84
+N2,212,のももっともだ,no mo mottomo da,"May well, Have or has good reason for, No wonder, … Is only natural",https://bunpro.jp/grammar_points/%E3%81%AE%E3%82%82%E3%82%82%E3%81%A3%E3%81%A8%E3%82%82%E3%81%A0
+N2,213,たって,tatte,"Even if, Even though, No matter how",https://bunpro.jp/grammar_points/%E3%81%9F%E3%81%A3%E3%81%A6
+N1,1,に至るまで,ni itaru made,"(Everything) from...to..., From…up until..., Starting with...ending with...",https://bunpro.jp/grammar_points/%E3%81%AB%E8%87%B3%E3%82%8B%E3%81%BE%E3%81%A7
+N1,2,たところで,ta tokoro de,"Even if ~ cannot or will not, Even though ~ not",https://bunpro.jp/grammar_points/%E3%81%9F%E3%81%A8%E3%81%93%E3%82%8D%E3%81%A7
+N1,3,如く・如き・如し,gotoku / gotoki / goshi,"Like, Similar to, As if, The same as",https://bunpro.jp/grammar_points/%E5%A6%82%E3%81%8F-%E5%A6%82%E3%81%8D-%E5%A6%82%E3%81%97
+N1,4,に足る,ni taru,"To be worthy of, To be enough, To be sufficient",https://bunpro.jp/grammar_points/%E3%81%AB%E8%B6%B3%E3%82%8B
+N1,5,極まりない・極まる,kiwamarinai / kiwamaru,"Extreme, Extremely",https://bunpro.jp/grammar_points/%E6%A5%B5%E3%81%BE%E3%82%8A%E3%81%AA%E3%81%84-%E6%A5%B5%E3%81%BE%E3%82%8B
+N1,6,といえども,to iedomo,"Even (if), Although, Even though",https://bunpro.jp/grammar_points/%E3%81%A8%E3%81%84%E3%81%88%E3%81%A9%E3%82%82
+N1,7,を以て,o motte,"By means of, With, By, Via, In view of",https://bunpro.jp/grammar_points/%E3%82%92%E4%BB%A5%E3%81%A6
+N1,8,きらいがある,kirai ga aru,"Have a tendency to, Tend to, Be slightly~",https://bunpro.jp/grammar_points/%E3%81%8D%E3%82%89%E3%81%84%E3%81%8C%E3%81%82%E3%82%8B
+N1,9,ならまだしも,nara mada shimo,"A is fine...but B is not, If it's ~ then it is ok...but ~ is not, It's different when...but, It's not so bad when...but",https://bunpro.jp/grammar_points/%E3%81%AA%E3%82%89%E3%81%BE%E3%81%A0%E3%81%97%E3%82%82
+N1,10,までもない,made mo nai,"There is no need to, Do not have to, It is not necessary to, Needless to",https://bunpro.jp/grammar_points/%E3%81%BE%E3%81%A7%E3%82%82%E3%81%AA%E3%81%84
+N1,11,ともなると・にもなると,tomo naru to / ni mo naru to,"When, If, Once, As",https://bunpro.jp/grammar_points/%E3%81%A8%E3%82%82%E3%81%AA%E3%82%8B%E3%81%A8-%E3%81%AB%E3%82%82%E3%81%AA%E3%82%8B%E3%81%A8
+N1,12,をいいことに,o ii koto ni,To take advantage of,https://bunpro.jp/grammar_points/%E3%82%92%E3%81%84%E3%81%84%E3%81%93%E3%81%A8%E3%81%AB
+N1,13,如何,ikaga,Depending on,https://bunpro.jp/grammar_points/%E5%A6%82%E4%BD%95
+N1,14,～るまでだ,~ru made da,"Just, Merely, Simply, Only",https://bunpro.jp/grammar_points/%EF%BD%9E%E3%82%8B%E3%81%BE%E3%81%A7%E3%81%A0
+N1,15,にあって,ni atte,"At, In the (place or situation), Under ~ conditions or circumstances, During, Suited to",https://bunpro.jp/grammar_points/%E3%81%AB%E3%81%82%E3%81%A3%E3%81%A6
+N1,16,を余儀なくされる,o yogi naku sareru,To be forced to do something,https://bunpro.jp/grammar_points/%E3%82%92%E4%BD%99%E5%84%80%E3%81%AA%E3%81%8F%E3%81%95%E3%82%8C%E3%82%8B
+N1,17,とは,to wa,"That..., (Surprised) that..., (Never expected) that..., (Shocked) that...",https://bunpro.jp/grammar_points/%E3%81%A8%E3%81%AF
+N1,18,じゃあるまいし,ja arumai shi,"You are not ~ so..., it isn't ~ so...",https://bunpro.jp/grammar_points/%E3%81%98%E3%82%83%E3%81%82%E3%82%8B%E3%81%BE%E3%81%84%E3%81%97
+N1,19,てからというもの,te kara to iu mono,"After, Since, Ever since then",https://bunpro.jp/grammar_points/%E3%81%A6%E3%81%8B%E3%82%89%E3%81%A8%E3%81%84%E3%81%86%E3%82%82%E3%81%AE
+N1,20,かたわら,katawara,"While, Besides, In addition to",https://bunpro.jp/grammar_points/%E3%81%8B%E3%81%9F%E3%82%8F%E3%82%89
+N1,21,を皮切りに,o kawakiri ni,"Beginning of, Starting with",https://bunpro.jp/grammar_points/%E3%82%92%E7%9A%AE%E5%88%87%E3%82%8A%E3%81%AB
+N1,22,に至っては,ni itatte wa,"When it comes to, As for, In particular, What is worse or more",https://bunpro.jp/grammar_points/%E3%81%AB%E8%87%B3%E3%81%A3%E3%81%A6%E3%81%AF
+N1,23,なり,nari,"As soon as, The moment, When",https://bunpro.jp/grammar_points/%E3%81%AA%E3%82%8A
+N1,24,ともなく・ともなしに,tomo naku / tomo nashi ni,"Absentmindedly, Mindlessly, Unconsciously, Without paying attention",https://bunpro.jp/grammar_points/%E3%81%A8%E3%82%82%E3%81%AA%E3%81%8F-%E3%81%A8%E3%82%82%E3%81%AA%E3%81%97%E3%81%AB
+N1,25,塗れ,nure,"Stained, Covered in, Smeared, Dirty with, Soaked in",https://bunpro.jp/grammar_points/%E5%A1%97%E3%82%8C
+N1,26,ようが～まいが,you ga ~ mai ga,"Even if, No matter what, Whether or not, [Emphatic], Volitional + が",https://bunpro.jp/grammar_points/-%E3%82%88%E3%81%86--%E3%81%86-%E3%81%BE%E3%81%84%20-%20%E3%81%8C-%E3%81%A8
+N1,27,からする,kara suru,"About, Or more, Over, Starts at",https://bunpro.jp/grammar_points/%E3%81%8B%E3%82%89%E3%81%99%E3%82%8B
+N1,28,にして①,ni shite (1),"At, Over, In, Only (after, when, or because)",https://bunpro.jp/grammar_points/%E3%81%AB%E3%81%97%E3%81%A61
+N1,29,ものを,mono o,"But, Although, If only, I wish I had",https://bunpro.jp/grammar_points/%E3%82%82%E3%81%AE%E3%82%92
+N1,30,であれ,de are,"Even if, Even, No matter",https://bunpro.jp/grammar_points/%E3%81%A7%E3%81%82%E3%82%8C
+N1,31,をおいてほかに〜ない,o oite hoka ni ~ nai,"No...but, Nothing else but, None other than",https://bunpro.jp/grammar_points/%E3%82%92%E3%81%8A%E3%81%84%E3%81%A6%E3%81%BB%E3%81%8B%E3%81%AB-%E3%81%AA%E3%81%84
+N1,32,をもって,o motte,"As of, With, Effective from",https://bunpro.jp/grammar_points/%E3%82%92%E3%82%82%E3%81%A3%E3%81%A6
+N1,33,とはいえ,to wa ie,"Though, Although (I admit that), Be that as it may, Nonetheless",https://bunpro.jp/grammar_points/%E3%81%A8%E3%81%AF%E3%81%84%E3%81%88
+N1,34,ならでは,nara de wa,"Unique to, Only, Impossible if not, Expected only of",https://bunpro.jp/grammar_points/%E3%81%AA%E3%82%89%E3%81%A7%E3%81%AF
+N1,35,すら,sura,Even,https://bunpro.jp/grammar_points/%E3%81%99%E3%82%89
+N1,36,あっての,atte no,"Exist only because of or due to, Owe everything to",https://bunpro.jp/grammar_points/%E3%81%82%E3%81%A3%E3%81%A6%E3%81%AE
+N1,37,～たまでだ,~ta made da,"Just, Merely, Simply, Only",https://bunpro.jp/grammar_points/%E3%81%9F%E3%81%BE%E3%81%A7%E3%81%A0
+N1,38,を経て,o hete,"Via, Through, After (experience at job, university, etc.), Pass through",https://bunpro.jp/grammar_points/%E3%82%92%E7%B5%8C%E3%81%A6
+N1,39,ながらに,nagara ni,"While being, Born (with), Traditional (old-fashioned, as it was long ago), As always, While crying or in tears, (Burned) alive",https://bunpro.jp/grammar_points/%E3%81%AA%E3%81%8C%E3%82%89%E3%81%AB
+N1,40,たなり・なり,ta nari / nari,"While... ~ing, Remaining, Not or ever since, Keep or leave",https://bunpro.jp/grammar_points/%E3%81%9F%E3%81%AA%E3%82%8A-%E3%81%AA%E3%82%8A
+N1,41,の極み,no kiwami,"Ultimate, Extreme, Utter, Epitome, Peak",https://bunpro.jp/grammar_points/%E3%81%AE%E6%A5%B5%E3%81%BF
+N1,42,にしてみれば,ni shite mireba,"For (A), In the case of (A), From (A)'s point of view, In the eyes of (A)",https://bunpro.jp/grammar_points/%E3%81%AB%E3%81%97%E3%81%A6%E3%81%BF%E3%82%8C%E3%81%B0
+N1,43,だの,da no,"Things like, And so on, Or something, And whatnot",https://bunpro.jp/grammar_points/%E3%81%A0%E3%81%AE
+N1,44,あくまでも,aku made mo,"To the (bitter) end, Stubbornly, Persistently",https://bunpro.jp/grammar_points/%E3%81%82%E3%81%8F%E3%81%BE%E3%81%A7%E3%82%82
+N1,45,べく,beku,"For the purpose of, In order to, To ensure",https://bunpro.jp/grammar_points/%E3%81%B9%E3%81%8F
+N1,46,ところを,tokoro o,"When, While, In spite of (the circumstances), Regardless of (the circumstances)",https://bunpro.jp/grammar_points/%E3%81%A8%E3%81%93%E3%82%8D%E3%82%92
+N1,47,からある,kara aru,"As much as, As many as, At least",https://bunpro.jp/grammar_points/%E3%81%8B%E3%82%89%E3%81%82%E3%82%8B
+N1,48,にして②,ni shite (2),"To be ~ and ~, To be ~ as well as ~, Both ~ and ~",https://bunpro.jp/grammar_points/%E3%81%AB%E3%81%97%E3%81%A62
+N1,49,つ〜つ,tsu ~ tsu,two contrasting actions,https://bunpro.jp/grammar_points/%E3%81%A4-%E3%81%A4
+N1,50,飽くまで(も),aku made (mo),"Just, Only, Merely, Strictly",https://bunpro.jp/grammar_points/%E9%A3%BD%E3%81%8F%E3%81%BE%E3%81%A7-%E3%82%82
+N1,51,であれ〜であれ,de are ~ de are,"Whether or, Or, No matter which, In either case",https://bunpro.jp/grammar_points/%E3%81%A7%E3%81%82%E3%82%8C-%E3%81%A7%E3%81%82%E3%82%8C
+N1,52,たら最後,tara saigo,"Once, Now that, As soon as",https://bunpro.jp/grammar_points/%E3%81%9F%E3%82%89%E6%9C%80%E5%BE%8C
+N1,53,いかなる,ikanaru,"What kind of, No matter what kind of, No … (with a negative verb), Any... (with a negative verb)",https://bunpro.jp/grammar_points/%E3%81%84%E3%81%8B%E3%81%AA%E3%82%8B
+N1,54,なりに,nari ni,"In one's own way, Of someone's own, Do one's best in one's own way, As much as one can",https://bunpro.jp/grammar_points/%E3%81%AA%E3%82%8A%E3%81%AB
+N1,55,れる・られる + ままに,reru / rareru + mama ni,"Do as (one is told or ordered…), In accordance with, In compliance with, Just like",https://bunpro.jp/grammar_points/verb-passive-%E3%81%BE%E3%81%BE%E3%81%AB
+N1,56,にまつわる,ni matsuwaru,"Surrounding, Related or relating to, Associated with, Connected to",https://bunpro.jp/grammar_points/%E3%81%AB%E3%81%BE%E3%81%A4%E3%82%8F%E3%82%8B
+N1,57,たる,taru,"To be (in a position of), As a, For",https://bunpro.jp/grammar_points/%E3%81%9F%E3%82%8B
+N1,58,なら〜で,nara ~ de,"If ~ should, Before ~ should",https://bunpro.jp/grammar_points/%E3%81%AA%E3%82%89-%E3%81%A7
+N1,59,をものともせず,o mono tomo sezu,"Making nothing of, Ignoring, In defiance of, Regardless of, Disregarding",https://bunpro.jp/grammar_points/%E3%82%92%E3%82%82%E3%81%AE%E3%81%A8%E3%82%82%E3%81%9B%E3%81%9A
+N1,60,には当たらない,ni wa ataranai,"No need to/for, Cannot, Not worth it to, Not suitable",https://bunpro.jp/grammar_points/%E3%81%AB%E3%81%AF%E5%BD%93%E3%81%9F%E3%82%89%E3%81%AA%E3%81%84
+N1,61,ものと思う,mono to omou,"Think that, Believe that, Expect that, Have confidence that, Absolutely",https://bunpro.jp/grammar_points/%E3%82%82%E3%81%AE%E3%81%A8%E6%80%9D%E3%81%86
+N1,62,を踏まえて,o fumaete,"Based on, Considering, Keeping in mind, Taking into account, Therefore",https://bunpro.jp/grammar_points/%E3%82%92%E8%B8%8F%E3%81%BE%E3%81%88%E3%81%A6
+N1,63,ゆえに,yue ni,"Because, The reason is, Due to, Therefore, So",https://bunpro.jp/grammar_points/%E3%82%86%E3%81%88%E3%81%AB
+N1,64,という,to iu,"Every single, Each and every, Emphasis, Everything that could be called",https://bunpro.jp/grammar_points/%E3%81%A8%E3%81%84%E3%81%86
+N1,65,にとどまらず,ni todomarazu,"Not limited to, Not only...but also, Not stopping at",https://bunpro.jp/grammar_points/%E3%81%AB%E3%81%A8%E3%81%A9%E3%81%BE%E3%82%89%E3%81%9A
+N1,66,と思いきや,to omoiki ya,"Thought...but, When...thought that...but, Despite having thought...",https://bunpro.jp/grammar_points/%E3%81%A8%E6%80%9D%E3%81%84%E3%81%8D%E3%82%84
+N1,67,どうにも,dou ni mo,"Cannot, There is no way one can, Nothing one can do, Cannot possibly not by any means, Cannot do no matter how hard one tries, Nothing will come out, It is meaningless to",https://bunpro.jp/grammar_points/%E3%81%A9%E3%81%86%E3%81%AB%E3%82%82
+N1,68,ことだし,koto da shi,"(And) so, Because, Since",https://bunpro.jp/grammar_points/%E3%81%93%E3%81%A8%E3%81%A0%E3%81%97
+N1,69,か否か,ka ina ka,Whether or not,https://bunpro.jp/grammar_points/%E3%81%8B%E5%90%A6%E3%81%8B
+N1,70,たら〜で,tara ~ de,"Even if, If",https://bunpro.jp/grammar_points/%E3%81%9F%E3%82%89-%E3%81%A7
+N1,71,べくして,beku shite,"As expected, Meant to, Supposed to, Destined to, Sure to",https://bunpro.jp/grammar_points/%E3%81%B9%E3%81%8F%E3%81%97%E3%81%A6
+N1,72,まま(に),mama (ni),"As (one likes, feels or pleases), Spur of the moment, Wherever one fancies, Spontaneously, On a whim",https://bunpro.jp/grammar_points/%E3%81%BE%E3%81%BE%E3%81%AB
+N1,73,かれ〜かれ,kare ~ kare,"Or, Either or",https://bunpro.jp/grammar_points/%E3%81%8B%E3%82%8C-%E3%81%8B%E3%82%8C
+N1,74,〜に〜ない,~ ni ~ nai,"Cannot even...if wants, Would like to...but cannot, Wants to...but cannot",https://bunpro.jp/grammar_points/-%E3%81%AB-%E3%81%AA%E3%81%84
+N1,75,なくして(は),nakushite (wa),"Without, If not for",https://bunpro.jp/grammar_points/%E3%81%AA%E3%81%8F%E3%81%97%E3%81%A6-%E3%81%AF
+N1,76,のなんのって,no nan no tte,"So much that, Extremely, Very",https://bunpro.jp/grammar_points/%E3%81%AE%E3%81%AA%E3%82%93%E3%81%AE%E3%81%A3%E3%81%A6
+N1,77,にかかっている,ni kakatte iru,To depend on,https://bunpro.jp/grammar_points/%E3%81%AB%E3%81%8B%E3%81%8B%E3%81%A3%E3%81%A6%E3%81%84%E3%82%8B
+N1,78,てやまない,te yamanai,"Never cease to, Always, Sincerely, Greatly, From the bottom of one's heart",https://bunpro.jp/grammar_points/%E3%81%A6%E3%82%84%E3%81%BE%E3%81%AA%E3%81%84
+N1,79,ぐらいなら,gurai nara,"Would rather...than, Rather than, Better off",https://bunpro.jp/grammar_points/%E3%81%90%E3%82%89%E3%81%84%E3%81%AA%E3%82%89
+N1,80,ってば・ったら,tteba / ttara,"I said...!, I told you...!, !",https://bunpro.jp/grammar_points/%E3%81%A3%E3%81%A6%E3%81%B0-%E3%81%A3%E3%81%9F%E3%82%89
+N1,81,ずとも,zu tomo,"Even if not, Without, Don't have to",https://bunpro.jp/grammar_points/%E3%81%9A%E3%81%A8%E3%82%82
+N1,82,とあって,to atte,"Since...(it is no wonder that), Because...(it is no wonder that), Due to...(it is no wonder that)",https://bunpro.jp/grammar_points/%E3%81%A8%E3%81%82%E3%81%A3%E3%81%A6
+N1,83,でもなんでもない,demo nan demo nai,"Not at all, By no means, Definitely not, Nothing like that, Not really",https://bunpro.jp/grammar_points/%E3%81%A7%E3%82%82%E3%81%AA%E3%82%93%E3%81%A7%E3%82%82%E3%81%AA%E3%81%84
+N1,84,ぐるみで,gurumi de,"Whole, -wide, Across the, Entire, All of, With … altogether",https://bunpro.jp/grammar_points/%E3%81%90%E3%82%8B%E3%81%BF%E3%81%A7
+N1,85,そばから,soba kara,"As soon as, Right after, Even if … still",https://bunpro.jp/grammar_points/%E3%81%9D%E3%81%B0%E3%81%8B%E3%82%89
+N1,86,に至って・に至り,ni itatte / ni itari,"When it came to, Only when, Only after, Go as far as",https://bunpro.jp/grammar_points/%E3%81%AB%E8%87%B3%E3%81%A3%E3%81%A6-%E3%81%AB%E8%87%B3%E3%82%8A
+N1,87,だに + しない,dani + shinai,"Not even, Not at all, Never could have",https://bunpro.jp/grammar_points/%E3%81%A0%E3%81%AB-%E3%81%97%E3%81%AA%E3%81%84
+N1,88,がてら,gatera,"On the occasion of, While … as well, While … (one is) at it, During, Along the way",https://bunpro.jp/grammar_points/%E3%81%8C%E3%81%A6%E3%82%89
+N1,89,んがため(に),nga tame (ni),"In order to, To, For the purpose of",https://bunpro.jp/grammar_points/%E3%82%93%E3%81%8C%E3%81%9F%E3%82%81-%E3%81%AB
+N1,90,いかん〜ず,ikan ~ zu,"Regardless of (whatever … is), Irrespective of (whatever … is)",https://bunpro.jp/grammar_points/%E3%81%84%E3%81%8B%E3%82%93-%E3%81%9A
+N1,91,にも～ない,ni mo ~ nai,"Cannot... even if one wants or tries, Would like but cannot, Wants or tries but cannot",https://bunpro.jp/grammar_points/%E3%81%AB%E3%82%82-%E3%81%AA%E3%81%84
+N1,92,い-Adj[く] + もなんともない,i-Adj [ku] + mo nantomo nai,"Not... or anything, Not at all, Not, By no means, Definitely not, Nothing like that",https://bunpro.jp/grammar_points/%E3%81%84-adj-%E3%81%8F-%E3%82%82%E3%81%AA%E3%82%93%E3%81%A8%E3%82%82%E3%81%AA%E3%81%84
+N1,93,Verb + だに,Verb + dani,"Just, Even just, Even merely",https://bunpro.jp/grammar_points/verb-%E3%81%A0%E3%81%AB
+N1,94,～なり～なり,~ nari ~ nari,"Or, Either or",https://bunpro.jp/grammar_points/-%E3%81%AA%E3%82%8A-%E3%81%AA%E3%82%8A
+N1,95,ないでもない,naide mo nai,"Kind of, Might, Slightly, It’s not (impossible) that, Somewhat, In some respects",https://bunpro.jp/grammar_points/%E3%81%AA%E3%81%84%E3%81%A7%E3%82%82%E3%81%AA%E3%81%84
+N1,96,もさることながら,mo saru koto nagara,"It is a fact that, But, Even more than, It goes without saying, Not only but also,",https://bunpro.jp/grammar_points/%E3%82%82%E3%81%95%E3%82%8B%E3%81%93%E3%81%A8%E3%81%AA%E3%81%8C%E3%82%89
+N1,97,ものと思っていた,mono to omotte ita,"Was under the impression that, (Always) the thought used to think",https://bunpro.jp/grammar_points/%E3%82%82%E3%81%AE%E3%81%A8%E6%80%9D%E3%81%A3%E3%81%A6%E3%81%84%E3%81%9F
+N1,98,でなくてなんだろう,de nakute nandarou,If … is not … then what is?,https://bunpro.jp/grammar_points/%E3%81%A7%E3%81%AA%E3%81%8F%E3%81%A6%E3%81%AA%E3%82%93%E3%81%A0%E3%82%8D%E3%81%86
+N1,99,はさておき・はさておいて,wa sate oki / wa sate oite,"(Leaving or putting) aside, Apart",https://bunpro.jp/grammar_points/%E3%81%AF%E3%81%95%E3%81%A6%E3%81%8A%E3%81%8D-%E3%81%AF%E3%81%95%E3%81%A6%E3%81%8A%E3%81%84%E3%81%A6
+N1,100,折には,ori ni wa,"When, Occasion, Opportunity, Time",https://bunpro.jp/grammar_points/%E6%8A%98%E3%81%AB%E3%81%AF
+N1,101,とばかり（に）,to bakari (ni),"As if (to say), Seeming that",https://bunpro.jp/grammar_points/%E3%81%A8%E3%81%B0%E3%81%8B%E3%82%8A
+N1,102,わ〜わ,wa ~ wa,"~and ~and, Keep ~ing, One after another, So much, So many, One after the other",https://bunpro.jp/grammar_points/%E3%82%8F-%E3%82%8F
+N1,103,に至っても,ni itatte mo,Even when,https://bunpro.jp/grammar_points/%E3%81%AB%E8%87%B3%E3%81%A3%E3%81%A6%E3%82%82
+N1,104,を兼ねて,o kanete,"And also, Also (partly) to, Also (partly) for (the purpose of), At the same time, To double as, When … also, While … as well, And as",https://bunpro.jp/grammar_points/%E3%82%92%E5%85%BC%E3%81%AD%E3%81%A6
+N1,105,Verb[ない]もの(だろう)か,Verb [nai] mono (darou) ka,"(Why) can’t, Isn’t there, Wish that, If only",https://bunpro.jp/grammar_points/verb-%E3%81%AA%E3%81%84%E3%82%82%E3%81%AE-%E3%81%A0%E3%82%8D%E3%81%86%E3%81%8B
+N1,106,Verb[て] + みせる,Verb [te] + miseru,"I will definitely, I will certainly, Just watch, Whatever it takes, I swear, for sure",https://bunpro.jp/grammar_points/verb-%E3%81%A6-%E3%81%BF%E3%81%9B%E3%82%8B
+N1,107,相まって,aimatte,"Combined with, Coupled with, Together with",https://bunpro.jp/grammar_points/%E7%9B%B8%E3%81%BE%E3%81%A3%E3%81%A6
+N1,108,に足りない,ni tarinai,"To not be worthy, To not be enough, To not be sufficient, To lack",https://bunpro.jp/grammar_points/%E3%81%AB%E8%B6%B3%E3%82%8A%E3%81%AA%E3%81%84
+N1,109,べからず,bekarazu,"Do not, Must not, Should not, Cannot (べからざる)",https://bunpro.jp/grammar_points/%E3%81%B9%E3%81%8B%E3%82%89%E3%81%9A
+N1,110,んばかりに,n bakari ni,"As if, As if it were about to, About to",https://bunpro.jp/grammar_points/%E3%82%93%E3%81%B0%E3%81%8B%E3%82%8A%E3%81%AB
+N1,111,に則って・に則り,ni sotte / ni sori,"According to, In accordance with, Based on, In line with",https://bunpro.jp/grammar_points/%E3%81%AB%E5%89%87%E3%81%A3%E3%81%A6-%E3%81%AB%E5%89%87%E3%82%8A
+N1,112,Adj限りだ,Adj kagiri da,"Extremely, Really, Very, As ... as one can be",https://bunpro.jp/grammar_points/adj%E9%99%90%E3%82%8A%E3%81%A0
+N1,113,はおろか,wa oroka,"Let alone, Much less, Needless to say, Not to mention, Not only but also",https://bunpro.jp/grammar_points/%E3%81%AF%E3%81%8A%E3%82%8D%E3%81%8B
+N1,114,めく・めいた,meku / meita,"Like, To show signs of, To have the appearance of, To come to a (state) similar to, Somewhat, An air of, Feels almost like",https://bunpro.jp/grammar_points/%E3%82%81%E3%81%8F-%E3%82%81%E3%81%84%E3%81%9F
+N1,115,といわず,to iwazu,"Not only A or B but every-; A, B and every-; Not only A or B but all over; A, B both, whether a or B",https://bunpro.jp/grammar_points/%E3%81%A8%E3%81%84%E3%82%8F%E3%81%9A
+N1,116,にもほどがある,ni mo hodo ga aru,"There is a limit to, You are too ..., How …!, How … one can be!",https://bunpro.jp/grammar_points/%E3%81%AB%E3%82%82%E3%81%BB%E3%81%A9%E3%81%8C%E3%81%82%E3%82%8B
+N1,117,にもまして,ni mo mashite,"Even -er than, Even more than, More than anything, More than anybody, More than ever",https://bunpro.jp/grammar_points/%E3%81%AB%E3%82%82%E3%81%BE%E3%81%97%E3%81%A6
+N1,118,まくる,makuru,"Like crazy, Keep doing (without a second thought), Nothing but, On and on, Do … all around, To do a lot of, One after another, All over, Keep, Everything, Constantly, All the time",https://bunpro.jp/grammar_points/%E3%81%BE%E3%81%8F%E3%82%8B
+N1,119,わ〜わ（で）,wa ~ wa (de),"And...so, And...because, Since",https://bunpro.jp/grammar_points/%E3%82%8F-%E3%82%8F%E3%81%A7
+N1,120,や否や,ya ina ya,"As soon as, No sooner than, The minute",https://bunpro.jp/grammar_points/%E3%82%84%E5%90%A6%E3%82%84
+N1,121,次第です,shidai desu,"Because the reason is, Therefore, The present situation is like this, This is how (it is), Those are the circumstances, This is why",https://bunpro.jp/grammar_points/%E6%AC%A1%E7%AC%AC%E3%81%A7%E3%81%99
+N1,122,というところ,to iu tokoro,"I would say (about), I guess (about), It could be said that, About, at best",https://bunpro.jp/grammar_points/%E3%81%A8%E3%81%84%E3%81%86%E3%81%A8%E3%81%93%E3%82%8D
+N1,123,１～たりとも～ない,1 ~ tari tomo ~ nai,"Not even one, Not a single, No (at all)",https://bunpro.jp/grammar_points/%EF%BC%91-%E3%82%8A%E3%81%A8%E3%82%82-%E3%81%AA%E3%81%84
+N1,124,ったらない・といったらない,ttara nai / to ittara nai,"Cannot tell, describe, say or express how, Words cannot express, Too … for words, Extremely",https://bunpro.jp/grammar_points/%E3%81%A3%E3%81%9F%E3%82%89%E3%81%AA%E3%81%84%E3%83%BB%E3%81%A8%E3%81%84%E3%81%A3%E3%81%9F%E3%82%89%E3%81%AA%E3%81%84
+N1,125,に照らして・に照らすと,ni terashite / ni terasu to,"In light of, Based on, According to, Referencing, Comparing against, In view of",https://bunpro.jp/grammar_points/%E3%81%AB%E7%85%A7%E3%82%89%E3%81%97%E3%81%A6%E3%83%BB%E3%81%AB%E7%85%A7%E3%82%89%E3%81%99%E3%81%A8
+N1,126,とあれば,to areba,"(Emphatic) if, If it is the case that, As (you wish)",https://bunpro.jp/grammar_points/%E3%81%A8%E3%81%82%E3%82%8C%E3%81%B0
+N1,127,さぞ,sazo,"You must be very, How … you must be, I dare to say, I am sure or certain that you must be very",https://bunpro.jp/grammar_points/%E3%81%95%E3%81%9E
+N1,128,ときたら,to kitara,"When it comes to, That or this … of mine, That or this darn …, That or this blasted …",https://bunpro.jp/grammar_points/%E3%81%A8%E3%81%8D%E3%81%9F%E3%82%891
+N1,129,びる,biru,"-like, Looking, Feeling, With an air of, To become",https://bunpro.jp/grammar_points/%E3%81%B3%E3%82%8B
+N1,130,にしたところで,ni shita tokoro de,"Even, Even for, Even from the perspective of, Even in the case of",https://bunpro.jp/grammar_points/%E3%81%AB%E3%81%97%E3%81%9F%E3%81%A8%E3%81%93%E3%82%8D%E3%81%A7
+N1,131,～ばこそ,~ba koso,"Precisely because, Only because, Because, Due to, Only if",https://bunpro.jp/grammar_points/%E3%81%B0%E3%81%93%E3%81%9D
+N1,132,ても差し支えない,temo sashitsukae nai,"May, Is bit a bother if, Do you mind if, Is it a problem if",https://bunpro.jp/grammar_points/%E3%81%A6%E3%82%82%E5%B7%AE%E3%81%97%E6%94%AF%E3%81%88%E3%81%AA%E3%81%84
+N1,133,には及ばない①,ni wa oyobanai (1),"There is no need to, It is fine if you don’t, Unnecessary",https://bunpro.jp/grammar_points/%E3%81%AB%E3%81%AF%E5%8F%8A%E3%81%B0%E3%81%AA%E3%81%841
+N1,134,に即して,ni sokushite,"In line with, Based on, In accordance with",https://bunpro.jp/grammar_points/%E3%81%AB%E5%8D%B3%E3%81%97%E3%81%A6
+N1,135,ないまでも,nai made mo,"May not … but (at least), Even though not, Even if not",https://bunpro.jp/grammar_points/%E3%81%AA%E3%81%84%E3%81%BE%E3%81%A7%E3%82%82
+N1,136,をよそに,o yoso ni,"Ignoring, Disregarding, Despite",https://bunpro.jp/grammar_points/%E3%82%92%E3%82%88%E3%81%9D%E3%81%AB
+N1,137,に限ったことではない,ni kagitta koto de wa nai,"Not limited to, Not restricted to, Not only",https://bunpro.jp/grammar_points/%E3%81%AB%E9%99%90%E3%81%A3%E3%81%9F%E3%81%93%E3%81%A8%E3%81%A7%E3%81%AF%E3%81%AA%E3%81%84
+N1,138,とは比べものにならない,to wa kurabe mono ni naranai,"Nothing compared to, Cannot be compared to, Much more, Way better, Above comparison (beyond comparison), Far greater than",https://bunpro.jp/grammar_points/%E3%81%A8%E3%81%AF%E6%AF%94%E3%81%B9%E3%82%82%E3%81%AE%E3%81%AB%E3%81%AA%E3%82%89%E3%81%AA%E3%81%84
+N1,139,まじき,majiki,"Unbecoming of, Unworthy of, Not proper for, Should not, Must not, Cannot",https://bunpro.jp/grammar_points/%E3%81%BE%E3%81%98%E3%81%8D
+N1,140,の至り,no itari,"Utmost, Height of, Extreme, Heartiest, Such a, Very, really, Completely, Deeply",https://bunpro.jp/grammar_points/%E3%81%AE%E8%87%B3%E3%82%8A
+N1,141,に恥じない,ni hajinai,"Lives up to, Truly to …’s name, Worthy of, Not dishonor, Not putting to shame, Measure to",https://bunpro.jp/grammar_points/%E3%81%AB%E6%81%A5%E3%81%98%E3%81%AA%E3%81%84
+N1,142,ずじまい,zu jimai,"Ended up not, Did not (in the end), Never did",https://bunpro.jp/grammar_points/%E3%81%9A%E3%81%98%E3%81%BE%E3%81%84
+N1,143,に言わせれば・に言わせると・に言わせたら,ni iwasereba / ni iwaseru to / ni iwaseta ra,"If you ask, In … opinion, According to",https://bunpro.jp/grammar_points/%E3%81%AB%E8%A8%80%E3%82%8F%E3%81%9B%E3%82%8C%E3%81%B0
+N1,144,ったら・といったら,ttara / to ittara,"Cannot tell, describe, say, express or find words for how, Words cannot express, Too … for words, Extremely",https://bunpro.jp/grammar_points/%E3%81%A3%E3%81%9F%E3%82%89-%E3%81%A8%E3%81%84%E3%81%A3%E3%81%9F%E3%82%89
+N1,145,こととて,koto tote,"Due to, Since, On account of, Because",https://bunpro.jp/grammar_points/%E3%81%93%E3%81%A8%E3%81%A8%E3%81%A6
+N1,146,ずくめ,zukume,"Completely, Entirely, All in, Nothing but, A real streak of, Without exception, Jet",https://bunpro.jp/grammar_points/%E3%81%9A%E3%81%8F%E3%82%81
+N1,147,には及ばない②,ni wa oyobanai (2),"To be no match (for), To not compare (with), To fall short (of), To not reach, Cannot win with, To be out of reach (for), To not be on par (with)",https://bunpro.jp/grammar_points/%E3%81%AB%E3%81%AF%E5%8F%8A%E3%81%B0%E3%81%AA%E3%81%84%E2%91%A1
+N1,148,とは言うものの,to wa iu mono no,"Although, But, Although I say, Although it is said, Having said that",https://bunpro.jp/grammar_points/%E3%81%A8%E3%81%AF%E8%A8%80%E3%81%86%E3%82%82%E3%81%AE%E3%81%AE
+N1,149,が早いか,ga hayai ka,"As soon as, No sooner than, The instant that, No sooner had",https://bunpro.jp/grammar_points/%E3%81%8C%E6%97%A9%E3%81%84%E3%81%8B
+N1,150,に難くない,ni katakunai,"Not hard to, Not difficult to, Easy to, Is obvious that",https://bunpro.jp/grammar_points/%E3%81%AB%E9%9B%A3%E3%81%8F%E3%81%AA%E3%81%84
+N1,151,ならいざ知らず,nara iza shirazu,"Don’t know about it, Maybe it would or might be possible for",https://bunpro.jp/grammar_points/%E3%81%AA%E3%82%89%E3%81%B0%E3%81%84%E3%81%96%E7%9F%A5%E3%82%89%E3%81%9A
+N1,152,を禁じ得ない,o kinji enai,"Cannot help feeling, Cannot but, Cannot hold back",https://bunpro.jp/grammar_points/%E3%82%92%E7%A6%81%E3%81%98%E5%BE%97%E3%81%AA%E3%81%84
+N1,153,にかこつけて,ni kakotsukete,"In the name of, Using the excuse of, To use as a pretext of, Under the guise or pretense of",https://bunpro.jp/grammar_points/%E3%81%AB%E3%81%8B%E3%81%93%E3%81%A4%E3%81%91%E3%81%A6
+N1,154,ようによっては,you ni yotte wa,"Depending on the way, Depending on how",https://bunpro.jp/grammar_points/%E3%82%88%E3%81%86%E3%81%AB%E3%82%88%E3%81%A3%E3%81%A6%E3%81%AF
+N1,155,べくもない,beku mo nai,"No (doubt or hope), There is no way, It is impossible, Not a hope in hell",https://bunpro.jp/grammar_points/%E3%81%B9%E3%81%8F%E3%82%82%E3%81%AA%E3%81%84
+N1,156,と来（き）たら,to kita ra,"For …(is the best), When it comes to, Concerning",https://bunpro.jp/grammar_points/%E3%81%A8%E3%81%8D%E3%81%9F%E3%82%892
+N1,157,ものとして,mono to shite,"Assuming, Supposing, (Interpret) as, On the assumption, Regarding, Considering",https://bunpro.jp/grammar_points/%E3%82%82%E3%81%AE%E3%81%A8%E3%81%97%E3%81%A6
+N1,158,を前提に,o zentei ni,On the premise of,https://bunpro.jp/grammar_points/%E3%82%92%E5%89%8D%E6%8F%90%E3%81%AB
+N1,159,ずにはすまない,zu ni wa sumanai,"Won't get away without, Won't get off without, Have to, Have no choice but to, Can’t not",https://bunpro.jp/grammar_points/%E3%81%9A%E3%81%AB%E3%81%AF%E3%81%99%E3%81%BE%E3%81%AA%E3%81%84
+N1,160,に堪えない,ni taenai,"Cannot bear to, Cannot stand to, Too much to, Cannot go on doing, Cannot tolerate",https://bunpro.jp/grammar_points/%E3%81%AB%E5%A0%AA%E3%81%88%E3%81%AA%E3%81%84
+N1,161,始末だ,shimatsu da,"Ends up, Finally, In the end, (Unfortunately) As a result, This is what happened, To come about, To wind up",https://bunpro.jp/grammar_points/%E5%A7%8B%E6%9C%AB%E3%81%A0
+N1,162,ものなら②,mono nara (2),"If you were to do, If you try to, If … happens, Should there be",https://bunpro.jp/grammar_points/%E3%82%82%E3%81%AE%E3%81%AA%E3%82%89%E2%91%A1
+N1,163,にひきかえ,ni hikikae,"In stark contrast, In comparison, On the other hand, While, In sharp contrast",https://bunpro.jp/grammar_points/%E3%81%AB%E3%81%B2%E3%81%8D%E3%81%8B%E3%81%88
+N1,164,それまでだ,sore made da,"If… then it is all in vain, It's done, It is useless, No point, It is a waste, That's it, It is all gone,",https://bunpro.jp/grammar_points/%E3%81%9D%E3%82%8C%E3%81%BE%E3%81%A7%E3%81%A0
+N1,165,といおうか,to iou ka,"How to put it, How shall I put it, How should I put it, Or perhaps, Or maybe, Call it … or",https://bunpro.jp/grammar_points/%E3%81%A8%E3%81%84%E3%81%8A%E3%81%86%E3%81%8B
+N1,166,ずにはおかない,zu ni wa okanai,"Will definitely, Will certainly, Bound to, Not fail to",https://bunpro.jp/grammar_points/%E3%81%9A%E3%81%AB%E3%81%AF%E3%81%8A%E3%81%8B%E3%81%AA%E3%81%84
+N1,167,を限りに,o kagiri ni,"As of (the end of), (Starting) from, (No longer) after, By (the), Ending with",https://bunpro.jp/grammar_points/%E3%82%92%E9%99%90%E3%82%8A%E3%81%AB
+N1,168,てはかなわない,te wa kanawanai,"It's unbearable when, It'd be unbearable if, I can't stand it when, I couldn’t stand it if",https://bunpro.jp/grammar_points/%E3%81%A6%E3%81%AF%E3%81%8B%E3%81%AA%E3%82%8F%E3%81%AA%E3%81%84
+N1,169,かたがた,katagata,"Partly for (the purpose of), In addition to, Along with, By the way, And also to, Incidentally, While",https://bunpro.jp/grammar_points/%E3%81%8B%E3%81%9F%E3%81%8C%E3%81%9F
+N1,170,を余儀なくさせる,o yogi naku saseru,"Force to, To compel, Make unavoidable",https://bunpro.jp/grammar_points/%E3%82%92%E4%BD%99%E5%84%80%E3%81%AA%E3%81%8F%E3%81%95%E3%81%9B%E3%82%8B
+N1,171,～てやる,~te yaru,"Just wait and see, Just you wait, To do a favor, For you, Definitely, For sure",https://bunpro.jp/grammar_points/%E3%81%A6%E3%82%84%E3%82%8B
+N1,172,ただ〜のみ,tada ~ nomi,"Nothing but, Should, Have to, Only, All that remains,",https://bunpro.jp/grammar_points/%E3%81%9F%E3%81%A0-%E3%81%AE%E3%81%BF
+N1,173,ものとする,mono to suru,"Shall, To assume, To suppose, To consider",https://bunpro.jp/grammar_points/%E3%82%82%E3%81%AE%E3%81%A8%E3%81%99%E3%82%8B
+N1,174,との,to no,"That, To",https://bunpro.jp/grammar_points/%E3%81%A8%E3%81%AE
+N1,175,以前,izen,"Before, Not even, Before even, Precede, Far from",https://bunpro.jp/grammar_points/%E4%BB%A5%E5%89%8D
+N1,176,ともあろう,tomo arou,"Of all people, Such,",https://bunpro.jp/grammar_points/%E3%81%A8%E3%82%82%E3%81%82%E3%82%8D%E3%81%86
+N1,177,こそすれ〜ない,koso sure ~ nai,"And certainly not, But certainly not, But, Although, Even though",https://bunpro.jp/grammar_points/%E3%81%93%E3%81%9D%E3%81%99%E3%82%8C-%E3%81%AA%E3%81%84
+N1,178,並み,nami,"As, On par with, Worthy of",https://bunpro.jp/grammar_points/%E4%B8%A6%E3%81%BF
+N1,179,に先駆けて,ni sakigakete,"First, Prior to, Pioneer, Ahead of",https://bunpro.jp/grammar_points/%E3%81%AB%E5%85%88%E9%A7%86%E3%81%91%E3%81%A6
+N1,180,を機に,o ki ni,"Opportunity, Occasion",https://bunpro.jp/grammar_points/%E3%82%92%E6%A9%9F%E3%81%AB
+  </template>
+
+  <script>
+    document.addEventListener('DOMContentLoaded', function() {
+      function parseCSV(text) {
+        const lines = text.split(/\r?\n/).map(l => l.trim()).filter(Boolean);
+        const rows = [];
+        for (const line of lines) {
+          const parts = [];
+          let current = "";
+          let inQuotes = false;
+          for (let i = 0; i < line.length; i++) {
+            const c = line[i];
+            if (c === '"') inQuotes = !inQuotes;
+            else if (c === ',' && !inQuotes) {
+              parts.push(current.trim());
+              current = "";
+            } else current += c;
+          }
+          parts.push(current.trim());
+          rows.push(parts);
+        }
+        return rows;
+      }
+
+      function groupByLevel(rows) {
+        const byLevel = {};
+        for (const row of rows) {
+          if (row.length < 5) continue;
+          const level = row[0].trim().toUpperCase();
+          if (!/^N[1-5]$/.test(level)) continue;
+          if (!byLevel[level]) byLevel[level] = [];
+          
+          const links = [];
+          for (let i = 5; i < row.length; i++) {
+            if (row[i].trim()) links.push(row[i].trim());
+          }
+          
+          const primaryLink = links.length > 0 ? links[0] : null;
+          const extraLinks = links.slice(1);
+          
+          byLevel[level].push({
+            level, index: parseInt(row[1], 10) || byLevel[level].length + 1,
+            grammar: row[2].trim(), romaji: row[3].trim() || "", 
+            meaning: row[4].trim() || "", 
+            primaryLink, extraLinks
+          });
+        }
+        ["N5", "N4", "N3", "N2", "N1"].forEach(lvl => {
+          if (byLevel[lvl]) byLevel[lvl].sort((a, b) => a.index - b.index);
+        });
+        return byLevel;
+      }
+
+      function shuffleArray(len) {
+        const arr = Array.from({length: len}, (_, i) => i);
+        let seed = 1234567 + len * 31;
+        for (let i = len - 1; i > 0; i--) {
+          seed = (seed * 1103515245 + 12345) & 0x7fffffff;
+          const j = Math.floor((seed / 0x80000000) * (i + 1));
+          [arr[i], arr[j]] = [arr[j], arr[i]];
+        }
+        return arr;
+      }
+
+      function dateToYMDString(d) {
+        return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+      }
+
+      function daysBetween(start, target) {
+        const msPerDay = 24 * 60 * 60 * 1000;
+        return Math.floor((new Date(target.getFullYear(), target.getMonth(), target.getDate()).getTime() - 
+                          new Date(start.getFullYear(), start.getMonth(), start.getDate()).getTime()) / msPerDay);
+      }
+
+      const csvText = document.getElementById("csvData").content.textContent;
+      const rows = parseCSV(csvText);
+      const byLevel = groupByLevel(rows);
+      const permutations = {};
+      Object.keys(byLevel).forEach(level => permutations[level] = shuffleArray(byLevel[level].length));
+      const ITEMS_PER_DAY = 5;
+      const LEVEL_ORDER = ["N5", "N4", "N3", "N2", "N1"];
+
+      const viewDateInput = document.getElementById("viewDate");
+      const prevBtn = document.getElementById("prevDayBtn");
+      const nextBtn = document.getElementById("nextDayBtn");
+      const todayBtn = document.getElementById("todayBtn");
+      const openCalendarBtn = document.getElementById("openCalendarBtn");
+      const infoDate = document.getElementById("infoDate");
+      const outputDiv = document.getElementById("output");
+      const filterButtons = document.querySelectorAll(".level-filter-btn");
+
+      viewDateInput.value = dateToYMDString(new Date());
+
+      const FILTER_KEY = "jlpt-active-filters";
+      const EXPAND_KEY = "jlpt-expanded-sections";
+      let activeFilters = JSON.parse(localStorage.getItem(FILTER_KEY) || JSON.stringify({ALL: true, N5: true, N4: true, N3: true, N2: true, N1: true}));
+      let expandedSections = JSON.parse(localStorage.getItem(EXPAND_KEY) || JSON.stringify({N5: true, N4: true, N3: true, N2: true, N1: true}));
+
+      function saveState() {
+        localStorage.setItem(FILTER_KEY, JSON.stringify(activeFilters));
+        localStorage.setItem(EXPAND_KEY, JSON.stringify(expandedSections));
+      }
+
+      function updateFilterButtons() {
+        filterButtons.forEach(btn => {
+          btn.classList.toggle("active", !!activeFilters[btn.dataset.level]);
+        });
+      }
+
+      function getLevelsToShow() {
+        const activeLevels = Object.keys(activeFilters).filter(key => activeFilters[key]);
+        if (activeLevels.includes("ALL")) return LEVEL_ORDER.filter(lvl => byLevel[lvl]);
+        return activeLevels.filter(lvl => byLevel[lvl]).sort((a, b) => LEVEL_ORDER.indexOf(a) - LEVEL_ORDER.indexOf(b));
+      }
+
+      function render() {
+        const viewStr = viewDateInput.value;
+        if (!viewStr) return;
+
+        const viewDate = new Date(viewStr + "T00:00:00");
+        const offsetDays = daysBetween(new Date("2025-01-01"), viewDate);
+        infoDate.textContent = viewStr;
+        outputDiv.innerHTML = "";
+
+        const levelsToShow = getLevelsToShow();
+        if (levelsToShow.length === 0) {
+          outputDiv.innerHTML = '<div class="empty-note">No levels selected</div>';
+          return;
+        }
+
+        levelsToShow.forEach(level => {
+          const items = byLevel[level];
+          if (!items?.length) return;
+
+          const perm = permutations[level];
+          const daySlice = (offsetDays * ITEMS_PER_DAY) % items.length;
+          const indices = [];
+          for (let i = 0; i < ITEMS_PER_DAY; i++) {
+            indices.push(perm[(daySlice + i) % items.length]);
+          }
+
+          const section = document.createElement("section");
+          section.className = `level-section level-${level}`;
+
+          section.innerHTML = `
+            <div class="level-heading level-${level}">
+              <div class="level-left">
+                <div class="level-pill"></div>
+                <div class="level-title">${level}</div>
+              </div>
+            </div>
+            <div class="level-body ${expandedSections[level] ? 'expanded' : ''}">
+              ${indices.slice(0, ITEMS_PER_DAY).map(idx => {
+                const item = items[idx];
+                const grammarLink = item.primaryLink 
+                  ? `<a href="${item.primaryLink}" target="_blank" rel="noopener">${item.grammar}</a>`
+                  : item.grammar;
+                const extraLinkIcons = item.extraLinks.map((link, i) => 
+                  `<a href="${link}" target="_blank" rel="noopener" class="extra-link" title="Link ${i+2}">↗</a>`
+                ).join('');
+                return `
+                  <div class="grammar-item">
+                    <div>
+                      <div class="grammar-main">${grammarLink}${extraLinkIcons}</div>
+                      <div class="grammar-romaji">${item.romaji}</div>
+                    </div>
+                    <div class="grammar-meaning">${item.meaning}</div>
+                  </div>
+                `;
+              }).join("")}
+            </div>
+          `;
+
+          const header = section.querySelector(".level-heading");
+          const body = section.querySelector(".level-body");
+          
+          header.addEventListener("click", () => {
+            const isExpanded = body.classList.toggle("expanded");
+            expandedSections[level] = isExpanded;
+            saveState();
+          });
+
+          outputDiv.appendChild(section);
+        });
+      }
+
+      prevBtn.addEventListener("click", () => {
+        const d = new Date(viewDateInput.value + "T00:00:00");
+        d.setDate(d.getDate() - 1);
+        viewDateInput.value = dateToYMDString(d);
+        render();
+      });
+      nextBtn.addEventListener("click", () => {
+        const d = new Date(viewDateInput.value + "T00:00:00");
+        d.setDate(d.getDate() + 1);
+        viewDateInput.value = dateToYMDString(d);
+        render();
+      });
+      todayBtn.addEventListener("click", () => {
+        viewDateInput.value = dateToYMDString(new Date());
+        render();
+      });
+      openCalendarBtn.addEventListener("click", () => {
+        viewDateInput.showPicker?.() || viewDateInput.click();
+      });
+      viewDateInput.addEventListener("change", render);
+
+      filterButtons.forEach(btn => {
+        btn.addEventListener("click", () => {
+          const level = btn.dataset.level;
+          activeFilters[level] = !activeFilters[level];
+
+          if (level === "ALL") {
+            const allOn = activeFilters.ALL;
+            LEVEL_ORDER.forEach(lvl => {
+              activeFilters[lvl] = allOn;
+              expandedSections[lvl] = allOn;
+            });
+          } else {
+            const allActive = LEVEL_ORDER.every(lvl => activeFilters[lvl]);
+            activeFilters.ALL = allActive;
+            expandedSections[level] = activeFilters[level];
+          }
+
+          saveState();
+          updateFilterButtons();
+          render();
+        });
+      });
+
+      updateFilterButtons();
+      render();
+    });
+  </script>
+</body>
+</html>
