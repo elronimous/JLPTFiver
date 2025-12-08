@@ -118,7 +118,7 @@ N5,117,Adjective + て・Noun + で,adjective + te / noun + de,And... (Conjuncti
 N5,118,Adjective + て + B,adjective + te + B,"And..., Both and (Conjunctive)",https://bunpro.jp/grammar_points/adjective-%E3%81%A6-b
 N5,119,のがへた,no ga heta,"To be bad at, Poor at, Unskillful",https://bunpro.jp/grammar_points/%E3%81%AE%E3%81%8C%E3%81%B8%E3%81%9F
 N5,120,のがじょうず,no ga jouzu,"To be good at, Proficient",https://bunpro.jp/grammar_points/%E3%81%AE%E3%81%8C%E3%81%98%E3%82%87%E3%81%86%E3%81%9A
-N5,121,Adjective + の(は),adjective + no (wa),"The 'one' that... (Indefinite pronoun, Adjective nominalization)",Adjective + の(は),https://bunpro.jp/grammar_points/adjective-%E3%81%AE-%E3%81%AF
+N5,121,Adjective + の(は),adjective + no (wa),"The 'one' that... (Indefinite pronoun/ Adjective nominalization)" / Adjective + の(は),https://bunpro.jp/grammar_points/adjective-%E3%81%AE-%E3%81%AF
 N5,122,あげる,ageru,"To give (away), To present, To provide",https://bunpro.jp/grammar_points/%E3%81%82%E3%81%92%E3%82%8B
 N5,123,くれる,kureru,"To give (me), To be given",https://bunpro.jp/grammar_points/%E3%81%8F%E3%82%8C%E3%82%8B
 N5,124,もらう,morau,"To receive, To get, To obtain",https://bunpro.jp/grammar_points/%E3%82%82%E3%82%89%E3%81%86
@@ -914,3 +914,4 @@ N1,178,並み,nami,"As, On par with, Worthy of",https://bunpro.jp/grammar_points
 N1,179,に先駆けて,ni sakigakete,"First, Prior to, Pioneer, Ahead of",https://bunpro.jp/grammar_points/%E3%81%AB%E5%85%88%E9%A7%86%E3%81%91%E3%81%A6
 
 N1,180,を機に,o ki ni,"Opportunity, Occasion",https://bunpro.jp/grammar_points/%E3%82%92%E6%A9%9F%E3%81%ABN5,1,だ,da,"To be, Is",https://bunpro.jp/grammar_points/%E3%81%A0
+
