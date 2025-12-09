@@ -38,6 +38,7 @@
   let totalInitial = 0;
   let showingBack = false;
   let awaitingNext = false; // after marking WRONG, show back + NEXT
+  let hasManualSave = false; // becomes true after "Save progress" or resuming a saved session
 
   function showSession(on){
     if (!overlayEl) return;
@@ -560,6 +561,7 @@ function buildList(){
 
     wrongExampleIds = new Set((s.wrongExampleIds || []).map(String));
 
+    hasManualSave = true;
     // Close selection modal if it was open and jump straight into the session
     close();
     showSession(true);
@@ -570,6 +572,7 @@ function buildList(){
 
   function endSession(){
     clearSavedSession();
+    hasManualSave = false;
     deck = [];
     wrongCount = 0;
     rightCount = 0;
@@ -580,6 +583,20 @@ function buildList(){
     wrongExampleIds = new Set();
     showSession(false);
     setSaveButtonState();
+  }
+
+
+
+  function quitSession(){
+    // If the user has manually saved (or resumed a saved session),
+    // just close the cram overlay and keep the saved snapshot.
+    if (hasManualSave){
+      showSession(false);
+      setSaveButtonState();
+    } else {
+      // No saved snapshot: behave like a full quit
+      endSession();
+    }
   }
 
   function buildDeckFromExampleIds(exampleIds, itemsPerGrammarOverride){
@@ -614,6 +631,7 @@ function buildList(){
 
     clearSavedSession();
 
+    hasManualSave = false;
     sessionExampleIds = Array.from(new Set(ids));
 
     wrongCount = 0;
@@ -692,6 +710,18 @@ showSession(true);
     const saveSection = `
       <div class="cram-results-save">
         <div class="cram-results-subtitle">Save as a cram list</div>
+
+        <div class="cram-results-save-row cram-results-save-scope">
+          <label class="cram-radio">
+            <input type="radio" name="cramResultsScope" value="all" checked />
+            <span>All from this session</span>
+          </label>
+          <label class="cram-radio">
+            <input type="radio" name="cramResultsScope" value="failed" ${wrongItems.length ? "" : "disabled"} />
+            <span>Only failed this session</span>
+          </label>
+        </div>
+
         <div class="cram-results-save-row">
           <input id="cramResultsNewListName" class="cram-select cram-text" type="text" placeholder="New list name…" />
           <button class="modal-btn primary" type="button" data-action="save-new-list">Save new</button>
@@ -705,7 +735,7 @@ showSession(true);
     `;
 
 
-    cardEl.innerHTML = `
+cardEl.innerHTML = `
       <div class="cram-results">
         <div class="cram-results-head">
           <div class="cram-results-title">Session complete</div>
@@ -751,40 +781,56 @@ showSession(true);
     const resultsHintEl = cardEl.querySelector('#cramResultsSaveHint');
     const saveNewBtn = cardEl.querySelector('[data-action="save-new-list"]');
     const addBtn = cardEl.querySelector('[data-action="add-to-list"]');
+    const scopeInputs = Array.from(cardEl.querySelectorAll('input[name="cramResultsScope"]'));
 
     function setResultsHint(t){
-      if (resultsHintEl) resultsHintEl.textContent = t || "Save the grammar from this session to a custom list.";
+      if (resultsHintEl){
+        resultsHintEl.textContent = t || "Save the grammar from this session to a custom list.";
+      }
+    }
+
+    function getScopedExampleIds(){
+      const scope = (scopeInputs.find(r => r.checked)?.value) || "all";
+      if (scope === "failed"){
+        return Array.from(wrongExampleIds || []);
+      }
+      return Array.from(sessionExampleIds || []);
     }
 
     function populateResultsLists(preserveName){
       if (!resultsSelectEl) return;
       const lists = getCramLists();
       const prev = preserveName ? (resultsSelectEl.value || "") : "";
+
       resultsSelectEl.innerHTML = "";
+
       const ph = document.createElement("option");
       ph.value = "";
       ph.textContent = "— Select a saved list —";
       resultsSelectEl.appendChild(ph);
 
-      Object.keys(lists).sort((a,b)=>a.localeCompare(b, undefined, { sensitivity:"base" })).forEach(name=>{
-        const arr = Array.isArray(lists[name]) ? lists[name] : [];
-        const opt = document.createElement("option");
-        opt.value = name;
-        opt.textContent = `${name} (${arr.length})`;
-        resultsSelectEl.appendChild(opt);
-      });
+      Object.keys(lists)
+        .sort((a,b)=>a.localeCompare(b, undefined, { sensitivity:"base" }))
+        .forEach(name=>{
+          const arr = Array.isArray(lists[name]) ? lists[name] : [];
+          const opt = document.createElement("option");
+          opt.value = name;
+          opt.textContent = `${name} (${arr.length})`;
+          resultsSelectEl.appendChild(opt);
+        });
 
       if (prev && lists[prev]) resultsSelectEl.value = prev;
       else resultsSelectEl.value = "";
     }
 
     function updateResultsSaveButtons(){
-      const hasSession = Array.isArray(sessionExampleIds) && sessionExampleIds.length > 0;
+      const ids = getScopedExampleIds();
+      const hasSomething = !!(ids && ids.length);
       const newNameOk = !!((resultsNewNameEl?.value || "").trim());
       const hasChosen = !!(resultsSelectEl && resultsSelectEl.value);
 
-      if (saveNewBtn) saveNewBtn.disabled = !(hasSession && newNameOk);
-      if (addBtn) addBtn.disabled = !(hasSession && hasChosen);
+      if (saveNewBtn) saveNewBtn.disabled = !(hasSomething && newNameOk);
+      if (addBtn) addBtn.disabled = !(hasSomething && hasChosen);
     }
 
     populateResultsLists(false);
@@ -792,49 +838,72 @@ showSession(true);
 
     resultsNewNameEl?.addEventListener("input", updateResultsSaveButtons);
     resultsSelectEl?.addEventListener("change", updateResultsSaveButtons);
+    scopeInputs.forEach(radio => {
+      radio.addEventListener("change", () => {
+        const ids = getScopedExampleIds();
+        if (radio.value === "failed" && (!ids || !ids.length)){
+          setResultsHint("No failed grammar to save this run.");
+        } else {
+          setResultsHint("");
+        }
+        updateResultsSaveButtons();
+      });
+    });
 
     saveNewBtn?.addEventListener("click", (e)=>{
-      e.preventDefault(); e.stopPropagation();
+      e.preventDefault();
+      e.stopPropagation();
       const name = (resultsNewNameEl?.value || "").trim();
       if (!name){
         setResultsHint("Enter a new list name first.");
         updateResultsSaveButtons();
         return;
       }
-      if (!sessionExampleIds?.length){
+
+      const ids = Array.from(new Set(getScopedExampleIds().map(String)));
+      if (!ids.length){
         setResultsHint("Nothing to save.");
+        updateResultsSaveButtons();
         return;
       }
+
       const lists = { ...getCramLists() };
       if (lists[name]){
         setResultsHint(`That list name already exists: "${name}".`);
         return;
       }
-      lists[name] = Array.from(new Set(sessionExampleIds.map(String)));
+
+      lists[name] = ids;
       saveCramLists(lists);
       populateResultsLists(true);
       if (resultsSelectEl) resultsSelectEl.value = name;
-      if (resultsNewNameEl) resultsNewNameEl.value = "";
       setResultsHint(`Saved as "${name}".`);
+      if (resultsNewNameEl) resultsNewNameEl.value = "";
       updateResultsSaveButtons();
     });
 
     addBtn?.addEventListener("click", (e)=>{
-      e.preventDefault(); e.stopPropagation();
+      e.preventDefault();
+      e.stopPropagation();
       const name = resultsSelectEl?.value || "";
       if (!name){
-        setResultsHint("Choose a list first.");
+        setResultsHint("Choose a list to add to.");
         updateResultsSaveButtons();
         return;
       }
-      if (!sessionExampleIds?.length){
+
+      const ids = Array.from(new Set(getScopedExampleIds().map(String)));
+      if (!ids.length){
         setResultsHint("Nothing to add.");
+        updateResultsSaveButtons();
         return;
       }
+
       const lists = { ...getCramLists() };
       const existing = new Set((lists[name] || []).map(String));
-      sessionExampleIds.forEach(id => existing.add(String(id)));
+      ids.forEach(id => existing.add(String(id)));
       lists[name] = Array.from(existing);
+
       saveCramLists(lists);
       populateResultsLists(true);
       if (resultsSelectEl) resultsSelectEl.value = name;
@@ -842,8 +911,7 @@ showSession(true);
       updateResultsSaveButtons();
     });
 
-
-    // Optional: clicking an item opens Bunpro (if we have a link)
+// Optional: clicking an item opens Bunpro (if we have a link)
     cardEl.querySelectorAll('.cram-wrong-list .cram-item').forEach((el, idx)=>{
       el.addEventListener('click', (e)=>{
         e.preventDefault();
@@ -938,6 +1006,7 @@ showSession(true);
     if (deck.length === 0){
       // Session completed: do not leave a resumable save behind.
       clearSavedSession();
+      hasManualSave = false;
       awaitingNext = false;
       if (flipHintEl) flipHintEl.hidden = true;
       setSaveButtonState();
@@ -981,6 +1050,7 @@ showSession(true);
 
   function beginSession(){
     clearSavedSession();
+    hasManualSave = false;
     wrongCount = 0;
     rightCount = 0;
     showingBack = false;
@@ -1251,6 +1321,7 @@ showSession(true);
     saveBtn?.addEventListener("click", () => {
       // Manual save: creates a resumable session for later.
       saveSessionSnapshot();
+      hasManualSave = true;
 
       if (saveBtn){
         const prev = saveBtn.textContent;
@@ -1264,7 +1335,7 @@ showSession(true);
       }
     });
 
-    quitBtn?.addEventListener("click", endSession);
+    quitBtn?.addEventListener("click", quitSession);
 
     wrongBtn?.addEventListener("click", markWrong);
     rightBtn?.addEventListener("click", markRight);
