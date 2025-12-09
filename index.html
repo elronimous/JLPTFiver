@@ -153,10 +153,121 @@
 
         <div class="settings-section-title">Export / Import</div>
         <div class="modal-actions">
-          <button id="exportDataBtn" class="modal-btn primary">⬇ Export JSON</button>
-          <button id="importDataBtn" class="modal-btn">⬆ Import JSON</button>
+          <button id="exportDataBtn" class="modal-btn primary">⬇ Export…</button>
+          <button id="importDataBtn" class="modal-btn">⬆ Import…</button>
         </div>
+
+        <div class="settings-section-title">Danger zone</div>
+        <div class="modal-actions">
+          <button id="deleteAllDataBtn" class="modal-btn danger">🗑 Delete all data!</button>
+        </div>
+
         <input type="file" id="importFileInput" accept="application/json" hidden />
+      </div>
+    </div>
+  </div>
+
+
+
+  <!-- Export options modal -->
+  <div id="exportOptionsModalBackdrop" class="modal-backdrop" hidden>
+    <div class="modal">
+      <div class="modal-header">
+        <div class="modal-title">Export Options</div>
+        <button id="closeExportOptionsBtn" class="modal-close-btn" aria-label="Close">✕</button>
+      </div>
+
+      <div class="modal-body">
+        <div class="modal-hint">
+          Choose what to include in your export file. If you're not sure, leave everything ticked.
+        </div>
+
+        <div class="data-select-grid">
+          <label class="settings-row" for="exSeen"><input id="exSeen" type="checkbox" checked /> <span>Stars / Seen items</span></label>
+          <label class="settings-row" for="exNotes"><input id="exNotes" type="checkbox" checked /> <span>Custom sentences (Notes)</span></label>
+          <label class="settings-row" for="exScores"><input id="exScores" type="checkbox" checked /> <span>Emoji scores</span></label>
+          <label class="settings-row" for="exSettings"><input id="exSettings" type="checkbox" checked /> <span>App settings</span></label>
+          <label class="settings-row" for="exHeatmap"><input id="exHeatmap" type="checkbox" checked /> <span>Study Log (heatmap)</span></label>
+          <label class="settings-row" for="exUi"><input id="exUi" type="checkbox" checked /> <span>UI (filters + expanded sections)</span></label>
+          <label class="settings-row" for="exCramLists"><input id="exCramLists" type="checkbox" checked /> <span>Custom cram lists</span></label>
+        </div>
+
+        <div class="modal-actions">
+          <button id="exportSelectedBtn" class="modal-btn primary">Export selected</button>
+          <button id="exportSelectAllBtn" class="modal-btn">Select all</button>
+          <button id="exportSelectNoneBtn" class="modal-btn">Select none</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Import options modal -->
+  <div id="importOptionsModalBackdrop" class="modal-backdrop" hidden>
+    <div class="modal">
+      <div class="modal-header">
+        <div class="modal-title">Import Options</div>
+        <button id="closeImportOptionsBtn" class="modal-close-btn" aria-label="Close">✕</button>
+      </div>
+
+      <div class="modal-body">
+        <div id="importSummaryHint" class="modal-hint"></div>
+
+        <div class="settings-section-title">Mode</div>
+        <div class="data-mode-row">
+          <label class="settings-row" for="importModeOverwrite"><input id="importModeOverwrite" name="importMode" type="radio" value="overwrite" checked /> <span>Overwrite</span></label>
+          <label class="settings-row" for="importModeMerge"><input id="importModeMerge" name="importMode" type="radio" value="merge" /> <span>Merge (only add missing items)</span></label>
+        </div>
+
+        <div class="settings-section-title">What to import</div>
+        <div class="data-select-grid">
+          <label class="settings-row" for="imSeen"><input id="imSeen" type="checkbox" /> <span>Stars / Seen items</span></label>
+          <label class="settings-row" for="imNotes"><input id="imNotes" type="checkbox" /> <span>Custom sentences (Notes)</span></label>
+          <label class="settings-row" for="imScores"><input id="imScores" type="checkbox" /> <span>Emoji scores</span></label>
+          <label class="settings-row" for="imSettings"><input id="imSettings" type="checkbox" /> <span>App settings</span></label>
+          <label class="settings-row" for="imHeatmap"><input id="imHeatmap" type="checkbox" /> <span>Study Log (heatmap)</span></label>
+          <label class="settings-row" for="imUi"><input id="imUi" type="checkbox" /> <span>UI (filters + expanded sections)</span></label>
+          <label class="settings-row" for="imCramLists"><input id="imCramLists" type="checkbox" /> <span>Custom cram lists</span></label>
+        </div>
+
+        <div class="modal-actions">
+          <button id="applyImportBtn" class="modal-btn primary">Import selected</button>
+          <button id="importSelectAllBtn" class="modal-btn">Select all</button>
+          <button id="importSelectNoneBtn" class="modal-btn">Select none</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+
+  <!-- Delete data modal -->
+  <div id="deleteOptionsModalBackdrop" class="modal-backdrop" hidden>
+    <div class="modal">
+      <div class="modal-header">
+        <div class="modal-title">Delete Data</div>
+        <button id="closeDeleteOptionsBtn" class="modal-close-btn" aria-label="Close">✕</button>
+      </div>
+
+      <div class="modal-body">
+        <div class="modal-hint">
+          Tick what you want to delete. This affects only this browser on this device.
+        </div>
+
+        <div class="data-select-grid">
+          <label class="settings-row" for="delSeen"><input id="delSeen" type="checkbox" checked /> <span>Stars / Seen items</span></label>
+          <label class="settings-row" for="delNotes"><input id="delNotes" type="checkbox" checked /> <span>Custom sentences (Notes)</span></label>
+          <label class="settings-row" for="delScores"><input id="delScores" type="checkbox" checked /> <span>Emoji scores</span></label>
+          <label class="settings-row" for="delSettings"><input id="delSettings" type="checkbox" checked /> <span>App settings</span></label>
+          <label class="settings-row" for="delHeatmap"><input id="delHeatmap" type="checkbox" checked /> <span>Study Log (heatmap)</span></label>
+          <label class="settings-row" for="delUi"><input id="delUi" type="checkbox" checked /> <span>UI (filters + expanded sections)</span></label>
+          <label class="settings-row" for="delCramLists"><input id="delCramLists" type="checkbox" checked /> <span>Custom cram lists</span></label>
+          <label class="settings-row" for="delCramSession"><input id="delCramSession" type="checkbox" checked /> <span>Saved cram session</span></label>
+        </div>
+
+        <div class="modal-actions">
+          <button id="deleteSelectedBtn" class="modal-btn danger">🗑 Delete selected</button>
+          <button id="deleteSelectAllBtn" class="modal-btn">Select all</button>
+          <button id="deleteSelectNoneBtn" class="modal-btn">Select none</button>
+        </div>
       </div>
     </div>
   </div>
@@ -273,15 +384,52 @@
             <button id="cramDeselectAllBtn" class="modal-btn">Deselect all</button>
           </div>
 
+          <div class="cram-customlists">
+            <div class="viewall-filter-label">Custom lists</div>
+            <div class="cram-customlists-row">
+              <select id="cramCustomListSelect" class="cram-select"></select>
+              <button id="cramLoadCustomListBtn" class="modal-btn" type="button" disabled>Load</button>
+              <button id="cramAddToCustomListBtn" class="modal-btn" type="button" disabled>Add to list</button>
+              <button id="cramDeleteCustomListBtn" class="modal-btn" type="button" disabled>Delete</button>
+            </div>
+            <div class="cram-customlists-row">
+              <input id="cramCustomListName" class="cram-select cram-text" type="text" placeholder="New list name…" />
+              <button id="cramSaveNewCustomListBtn" class="modal-btn" type="button" disabled>Save new</button>
+            </div>
+            <div id="cramCustomListHint" class="modal-hint" style="margin:.1rem 0 0 0">Save your current selection, then load it later from the dropdown.</div>
+          </div>
+
+
 
 
           <div class="cram-footer-row">
-            <div id="cramSelectedCount" class="modal-hint" style="margin:0">Selected: 0</div>
+            <div class="cram-counts">
+              <div id="cramSelectedCount" class="modal-hint" style="margin:0">Selected: 0</div>
+              <div id="cramTotalCards" class="modal-hint" style="margin:0">Total cards: 0</div>
+              <div id="cramSelectedByLevel" class="modal-hint" style="margin:0">Selected Grammar: N5=0, N4=0, N3=0, N2=0, N1=0</div>
+            </div>
             <button id="cramStartBtn" class="modal-btn primary" disabled>Start</button>
           </div>
         </div>
 
         <div id="cramList" class="cram-list"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- CRAM resume prompt -->
+  <div id="cramResumeBackdrop" class="modal-backdrop" hidden>
+    <div class="modal">
+      <div class="modal-header">
+        <div class="modal-title">Resume cram?</div>
+        <button id="cramResumeCloseBtn" class="modal-close-btn" aria-label="Close">✕</button>
+      </div>
+      <div class="modal-body">
+        <div class="modal-hint" style="margin:0 0 .8rem 0">You have a saved cram session. Continue where you left off?</div>
+        <div class="modal-actions">
+          <button id="cramResumeBtn" class="modal-btn primary" type="button">Continue</button>
+          <button id="cramDiscardBtn" class="modal-btn" type="button">Start new</button>
+        </div>
       </div>
     </div>
   </div>
@@ -293,7 +441,10 @@
         <div id="cramProgressText" class="cram-session-stat">Remaining 0 / 0</div>
         <div id="cramScoreText" class="cram-session-stat">Wrong 0 • Right 0</div>
       </div>
-      <button id="cramQuitBtn" class="chip-btn">✕ Quit</button>
+      <div class="cram-session-actions">
+        <button id="cramSaveBtn" class="chip-btn primary" type="button">Save progress</button>
+        <button id="cramQuitBtn" class="chip-btn" type="button">✕ Quit</button>
+      </div>
     </div>
 
     <div class="cram-card-wrap">
@@ -303,7 +454,7 @@
         <button id="cramRightBtn" class="cram-action right">RIGHT</button>
         <button id="cramNextBtn" class="cram-action next" hidden>NEXT</button>
       </div>
-      <div class="modal-hint" style="text-align:center;margin-top:.6rem">
+      <div id="cramFlipHint" class="modal-hint" style="text-align:center;margin-top:.6rem">
         Click the card to flip.
       </div>
     </div>

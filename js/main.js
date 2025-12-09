@@ -62,6 +62,57 @@
     const importBtn = Utils.qs("#importDataBtn");
     const importFileInput = Utils.qs("#importFileInput");
 
+
+    const deleteAllDataBtn = Utils.qs("#deleteAllDataBtn");
+
+    // Export options modal
+    const exportOptionsBackdrop = Utils.qs("#exportOptionsModalBackdrop");
+    const closeExportOptionsBtn = Utils.qs("#closeExportOptionsBtn");
+    const exportSelectedBtn = Utils.qs("#exportSelectedBtn");
+    const exportSelectAllBtn = Utils.qs("#exportSelectAllBtn");
+    const exportSelectNoneBtn = Utils.qs("#exportSelectNoneBtn");
+    const exSeen = Utils.qs("#exSeen");
+    const exNotes = Utils.qs("#exNotes");
+    const exScores = Utils.qs("#exScores");
+    const exSettings = Utils.qs("#exSettings");
+    const exHeatmap = Utils.qs("#exHeatmap");
+    const exUi = Utils.qs("#exUi");
+    const exCramLists = Utils.qs("#exCramLists");
+
+    // Import options modal
+    const importOptionsBackdrop = Utils.qs("#importOptionsModalBackdrop");
+    const closeImportOptionsBtn = Utils.qs("#closeImportOptionsBtn");
+    const importSummaryHint = Utils.qs("#importSummaryHint");
+    const importModeOverwrite = Utils.qs("#importModeOverwrite");
+    const importModeMerge = Utils.qs("#importModeMerge");
+    const applyImportBtn = Utils.qs("#applyImportBtn");
+    const importSelectAllBtn = Utils.qs("#importSelectAllBtn");
+    const importSelectNoneBtn = Utils.qs("#importSelectNoneBtn");
+    const imSeen = Utils.qs("#imSeen");
+    const imNotes = Utils.qs("#imNotes");
+    const imScores = Utils.qs("#imScores");
+    const imSettings = Utils.qs("#imSettings");
+    const imHeatmap = Utils.qs("#imHeatmap");
+    const imUi = Utils.qs("#imUi");
+    const imCramLists = Utils.qs("#imCramLists");
+
+    // Delete options modal
+    const deleteOptionsBackdrop = Utils.qs("#deleteOptionsModalBackdrop");
+    const closeDeleteOptionsBtn = Utils.qs("#closeDeleteOptionsBtn");
+    const deleteSelectedBtn = Utils.qs("#deleteSelectedBtn");
+    const deleteSelectAllBtn = Utils.qs("#deleteSelectAllBtn");
+    const deleteSelectNoneBtn = Utils.qs("#deleteSelectNoneBtn");
+    const delSeen = Utils.qs("#delSeen");
+    const delNotes = Utils.qs("#delNotes");
+    const delScores = Utils.qs("#delScores");
+    const delSettings = Utils.qs("#delSettings");
+    const delHeatmap = Utils.qs("#delHeatmap");
+    const delUi = Utils.qs("#delUi");
+    const delCramLists = Utils.qs("#delCramLists");
+    const delCramSession = Utils.qs("#delCramSession");
+
+    let pendingImport = null; // { parsed, inspect }
+
     function setTodayButtonLabel(viewStr){
       const todayYMD = Utils.dateToYMD(new Date());
       if (viewStr === todayYMD){
@@ -235,26 +286,135 @@
       render();
     });
 
-    // Export / Import (uses Heatmap.exportState() / Heatmap.importState())
-    exportBtn.addEventListener("click", ()=>{
-      const payload = {
-        ...Storage.exportPayload(),
-        heatmap: (window.Heatmap ? Heatmap.exportState() : null)
-      };
-
+    // Export / Import (selection + merge/overwrite)
+    function downloadJson(payload, filename){
       const blob = new Blob([JSON.stringify(payload, null, 2)], { type:"application/json" });
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
       a.href = url;
-      a.download = "jlpt-user-data.json";
+      a.download = filename;
       document.body.appendChild(a);
       a.click();
       document.body.removeChild(a);
       URL.revokeObjectURL(url);
+    }
+
+    function openExportOptions(){ exportOptionsBackdrop.hidden = false; }
+    function closeExportOptions(){ exportOptionsBackdrop.hidden = true; }
+    exportBtn.addEventListener("click", openExportOptions);
+    closeExportOptionsBtn.addEventListener("click", closeExportOptions);
+    exportOptionsBackdrop.addEventListener("click", (ev)=>{ if (ev.target === exportOptionsBackdrop) closeExportOptions(); });
+
+    function setExportChecks(val){
+      [exSeen, exNotes, exScores, exSettings, exHeatmap, exUi, exCramLists].forEach(cb=>{ if (cb) cb.checked = !!val; });
+    }
+    exportSelectAllBtn.addEventListener("click", ()=>setExportChecks(true));
+    exportSelectNoneBtn.addEventListener("click", ()=>setExportChecks(false));
+
+    exportSelectedBtn.addEventListener("click", ()=>{
+      const any = !!(exSeen.checked || exNotes.checked || exScores.checked || exSettings.checked || exHeatmap.checked || exUi.checked || exCramLists.checked);
+      if (!any){
+        alert("Select at least one thing to export.");
+        return;
+      }
+
+      const payload = {
+        meta: {
+          app: "JLPTFiver",
+          schemaVersion: 2,
+          exportedAt: new Date().toISOString()
+        }
+      };
+
+      if (exSeen.checked) payload.seenExamples = Storage.userData.seenExamples;
+      if (exNotes.checked) payload.notesByGrammar = Storage.userData.notesByGrammar;
+      if (exScores.checked) payload.scoresByExample = Storage.userData.scoresByExample;
+      if (exSettings.checked) payload.settings = Storage.settings;
+
+      if (exUi.checked || exCramLists.checked){
+        payload.ui = {};
+        if (exUi.checked){
+          payload.ui.filters = Storage.ui.filters;
+          payload.ui.expanded = Storage.ui.expanded;
+        }
+        if (exCramLists.checked){
+          payload.ui.cramLists = Storage.ui.cramLists;
+        }
+      }
+
+      if (exHeatmap.checked && window.Heatmap){
+        payload.heatmap = Heatmap.exportState();
+      }
+
+      // Give the export a date so multiple backups don't overwrite each other
+      const stamp = Utils.dateToYMD(new Date()).replaceAll("-", "");
+      downloadJson(payload, `jlptfiver-export-${stamp}.json`);
+      closeExportOptions();
     });
 
+    function openImportOptions(){ importOptionsBackdrop.hidden = false; }
+    function closeImportOptions(){
+      importOptionsBackdrop.hidden = true;
+      pendingImport = null;
+    }
+    closeImportOptionsBtn.addEventListener("click", closeImportOptions);
+    importOptionsBackdrop.addEventListener("click", (ev)=>{ if (ev.target === importOptionsBackdrop) closeImportOptions(); });
+
+    function setImportChecks(val){
+      [imSeen, imNotes, imScores, imSettings, imHeatmap, imUi, imCramLists].forEach(cb=>{
+        if (!cb) return;
+        if (cb.disabled) return;
+        cb.checked = !!val;
+      });
+    }
+    importSelectAllBtn.addEventListener("click", ()=>setImportChecks(true));
+    importSelectNoneBtn.addEventListener("click", ()=>setImportChecks(false));
+
+    function summarizeIncoming(inspect){
+      const n = inspect.normalized;
+      const parts = [];
+      const count = (x)=> x && typeof x === "object" ? Object.keys(x).length : 0;
+      if (inspect.hasSeen) parts.push(`Stars: ${count(n.seenExamples)}`);
+      if (inspect.hasNotes) parts.push(`Notes: ${count(n.notesByGrammar)} grammar points`);
+      if (inspect.hasScores) parts.push(`Scores: ${count(n.scoresByExample)}`);
+      if (inspect.hasSettings) parts.push(`Settings: ${count(n.settings)} keys`);
+      if (inspect.hasUi) parts.push(`UI: ${count(n.ui?.filters)} filters / ${count(n.ui?.expanded)} expanded`);
+      if (inspect.hasCramLists) parts.push(`Cram lists: ${count(n.ui?.cramLists)}`);
+      if (inspect.hasHeatmap) parts.push(`Study Log: ${count(n.heatmap?.visitedDays)} days`);
+      return parts.length ? `File contains: ${parts.join(" • ")}` : "This file doesn't contain any data I recognise.";
+    }
+
+    function mergeHeatmapState(existing, incoming){
+      const out = JSON.parse(JSON.stringify(existing || {}));
+      const inc = incoming && typeof incoming === "object" ? incoming : {};
+
+      // Only merge content, not presentation settings
+      out.visitedDays = out.visitedDays && typeof out.visitedDays === "object" ? out.visitedDays : {};
+      if (inc.visitedDays && typeof inc.visitedDays === "object"){
+        Object.keys(inc.visitedDays).forEach(ymd=>{
+          if (out.visitedDays[ymd] === undefined) out.visitedDays[ymd] = !!inc.visitedDays[ymd];
+        });
+      }
+
+      out.goals = Array.isArray(out.goals) ? out.goals : [];
+      const curIds = new Set(out.goals.map(g=>g && g.id).filter(Boolean));
+      const curSig = new Set(out.goals.map(g=>`${g?.ymd||""}|||${g?.emoji||""}|||${g?.text||""}`));
+      const incGoals = Array.isArray(inc.goals) ? inc.goals : [];
+      incGoals.forEach(g=>{
+        if (!g || typeof g !== "object") return;
+        if (g.id && curIds.has(g.id)) return;
+        const sig = `${g?.ymd||""}|||${g?.emoji||""}|||${g?.text||""}`;
+        if (curSig.has(sig)) return;
+        out.goals.push(g);
+        if (g.id) curIds.add(g.id);
+        curSig.add(sig);
+      });
+
+      return out;
+    }
+
     importBtn.addEventListener("click", ()=>importFileInput.click());
-    importFileInput.addEventListener("change",(ev)=>{
+    importFileInput.addEventListener("change", (ev)=>{
       const file = ev.target.files[0];
       if (!file) return;
 
@@ -262,31 +422,29 @@
       reader.onload = (e)=>{
         try{
           const parsed = JSON.parse(e.target.result);
+          const inspect = Storage.inspectPayload(parsed);
+          pendingImport = { parsed, inspect };
 
-          Storage.importPayload(parsed);
+          // Fill summary + enable/disable options based on availability
+          importSummaryHint.textContent = summarizeIncoming(inspect);
 
-          // Heatmap import
-          if (parsed.heatmap && window.Heatmap) {
-            Heatmap.importState(parsed.heatmap);
-          }
+          const setOpt = (cb, has)=>{
+            cb.disabled = !has;
+            cb.checked = !!has;
+          };
+          setOpt(imSeen, inspect.hasSeen);
+          setOpt(imNotes, inspect.hasNotes);
+          setOpt(imScores, inspect.hasScores);
+          setOpt(imSettings, inspect.hasSettings);
+          setOpt(imUi, inspect.hasUi);
+          setOpt(imCramLists, inspect.hasCramLists);
+          setOpt(imHeatmap, inspect.hasHeatmap);
 
-          // Update settings UI
-          toggleHideEnglishNotes.checked = !!Storage.settings.hideEnglishDefault;
-          toggleEmojiScores.checked = !!Storage.settings.scoresEnabled;
-          toggleProgressiveMode.checked = !!Storage.settings.progressiveEnabled;
-          progressiveDatesWrap.hidden = !toggleProgressiveMode.checked;
-          if (!progressiveDatesWrap.hidden) buildProgressiveGrid();
+          // Default mode
+          importModeOverwrite.checked = true;
+          importModeMerge.checked = false;
 
-          // Heatmap visibility UI
-          if (window.Heatmap){
-            toggleHeatmapVisible.checked = !!Heatmap.exportState().visible;
-          }
-
-          updateFilterButtons();
-          window.App.Scores.applyEnabled(Storage.settings.scoresEnabled);
-          render();
-          if (!Utils.qs("#viewAllModal").hidden) window.App.ViewAll.open();
-          window.App.Cram?.refreshIfOpen?.();
+          openImportOptions();
         }catch{
           alert("Invalid JSON file.");
         }
@@ -295,6 +453,151 @@
       importFileInput.value = "";
     });
 
+    applyImportBtn.addEventListener("click", ()=>{
+      if (!pendingImport) return;
+
+      const mode = importModeMerge.checked ? "merge" : "overwrite";
+      const include = {
+        seen: !!imSeen.checked,
+        notes: !!imNotes.checked,
+        scores: !!imScores.checked,
+        settings: !!imSettings.checked,
+        ui: !!imUi.checked,
+        cramLists: !!imCramLists.checked
+      };
+      const any = Object.values(include).some(Boolean) || !!imHeatmap.checked;
+      if (!any){
+        alert("Select at least one thing to import.");
+        return;
+      }
+
+      // Storage import (handles merge/overwrite)
+      Storage.importSelected(pendingImport.parsed, { mode, include });
+
+      // Heatmap import/merge
+      if (imHeatmap.checked && window.Heatmap && pendingImport.inspect.normalized.heatmap){
+        const incomingHm = pendingImport.inspect.normalized.heatmap;
+        if (mode === "overwrite"){
+          Heatmap.importState(incomingHm);
+        } else {
+          const merged = mergeHeatmapState(Heatmap.exportState(), incomingHm);
+          Heatmap.importState(merged);
+        }
+      }
+
+      // Update settings UI
+      toggleHideEnglishNotes.checked = !!Storage.settings.hideEnglishDefault;
+      toggleEmojiScores.checked = !!Storage.settings.scoresEnabled;
+      toggleProgressiveMode.checked = !!Storage.settings.progressiveEnabled;
+      progressiveDatesWrap.hidden = !toggleProgressiveMode.checked;
+      if (!progressiveDatesWrap.hidden) buildProgressiveGrid();
+
+      // Heatmap visibility UI
+      if (window.Heatmap){
+        toggleHeatmapVisible.checked = !!Heatmap.exportState().visible;
+      }
+
+      updateFilterButtons();
+      window.App.Scores.applyEnabled(Storage.settings.scoresEnabled);
+      render();
+      if (!Utils.qs("#viewAllModal").hidden) window.App.ViewAll.open();
+      window.App.Cram?.refreshIfOpen?.();
+
+      closeImportOptions();
+    });
+    // Delete data (with a checkbox picker)
+    function setDeleteChecks(val){
+      [delSeen, delNotes, delScores, delSettings, delHeatmap, delUi, delCramLists, delCramSession].forEach(cb=>{
+        if (cb) cb.checked = !!val;
+      });
+    }
+
+    function openDeleteOptions(){
+      if (!deleteOptionsBackdrop) return;
+      setDeleteChecks(true);
+      deleteOptionsBackdrop.hidden = false;
+    }
+    function closeDeleteOptions(){
+      if (!deleteOptionsBackdrop) return;
+      deleteOptionsBackdrop.hidden = true;
+    }
+
+    deleteAllDataBtn.addEventListener("click", openDeleteOptions);
+    closeDeleteOptionsBtn?.addEventListener("click", closeDeleteOptions);
+    deleteOptionsBackdrop?.addEventListener("click", (ev)=>{ if (ev.target === deleteOptionsBackdrop) closeDeleteOptions(); });
+    deleteSelectAllBtn?.addEventListener("click", ()=>setDeleteChecks(true));
+    deleteSelectNoneBtn?.addEventListener("click", ()=>setDeleteChecks(false));
+
+    function deleteSelected(){
+      const items = [
+        { cb: delSeen, label: "Stars / Seen items" },
+        { cb: delNotes, label: "Custom sentences (Notes)" },
+        { cb: delScores, label: "Emoji scores" },
+        { cb: delSettings, label: "App settings" },
+        { cb: delHeatmap, label: "Study Log (heatmap)" },
+        { cb: delUi, label: "UI (filters + expanded sections)" },
+        { cb: delCramLists, label: "Custom cram lists" },
+        { cb: delCramSession, label: "Saved cram session" },
+      ];
+      const picked = items.filter(x=>x.cb && x.cb.checked);
+      if (!picked.length){
+        alert("Select at least one thing to delete.");
+        return;
+      }
+
+      const list = picked.map(x=>`• ${x.label}`).join('\n');
+      const ok1 = confirm(`Delete the selected data?\n\n${list}\n\nThis cannot be undone.`);
+      if (!ok1) return;
+      const ok2 = confirm("Really delete? This cannot be undone.");
+      if (!ok2) return;
+
+      const allChecked = items.every(x=>x.cb && x.cb.checked);
+      if (allChecked){
+        Object.values(CONST.STORAGE_KEYS).forEach(k=>localStorage.removeItem(k));
+        closeDeleteOptions();
+        location.reload();
+        return;
+      }
+
+      let userDataChanged = false;
+      if (delSeen?.checked){ Storage.userData.seenExamples = {}; userDataChanged = true; }
+      if (delNotes?.checked){ Storage.userData.notesByGrammar = {}; userDataChanged = true; }
+      if (delScores?.checked){ Storage.userData.scoresByExample = {}; userDataChanged = true; }
+      if (userDataChanged) Storage.saveUserData();
+
+      if (delSettings?.checked){
+        Storage.settings = {
+          hideEnglishDefault: false,
+          scoresEnabled: true,
+          progressiveEnabled: false,
+          progressiveStartByLevel: {}
+        };
+        Storage.saveSettings();
+      }
+
+      if (delUi?.checked){
+        Storage.ui.filters = { ALL:true, N5:true, N4:true, N3:true, N2:true, N1:true };
+        Storage.ui.expanded = { N5:true, N4:true, N3:true, N2:true, N1:true };
+        Storage.saveUi();
+      }
+
+      if (delCramLists?.checked){
+        Storage.ui.cramLists = {};
+        Storage.saveUi();
+      }
+
+      if (delHeatmap?.checked){
+        localStorage.removeItem(CONST.STORAGE_KEYS.HEATMAP);
+      }
+      if (delCramSession?.checked){
+        localStorage.removeItem(CONST.STORAGE_KEYS.CRAM_SESSION);
+      }
+
+      closeDeleteOptions();
+      location.reload();
+    }
+
+    deleteSelectedBtn?.addEventListener("click", deleteSelected);
     // Initial UI + render
     updateFilterButtons();
     render();

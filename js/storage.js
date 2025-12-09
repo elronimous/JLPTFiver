@@ -20,7 +20,8 @@
   // UI state
   Storage.ui = {
     filters: loadJSON(CONST.STORAGE_KEYS.FILTERS, {ALL:true,N5:true,N4:true,N3:true,N2:true,N1:true}),
-    expanded: loadJSON(CONST.STORAGE_KEYS.EXPANDED, {N5:true,N4:true,N3:true,N2:true,N1:true})
+    expanded: loadJSON(CONST.STORAGE_KEYS.EXPANDED, {N5:true,N4:true,N3:true,N2:true,N1:true}),
+    cramLists: loadJSON(CONST.STORAGE_KEYS.CRAM_LISTS, {})
   };
 
   // Settings
@@ -73,12 +74,26 @@
     if (!Storage.settings.progressiveStartByLevel || typeof Storage.settings.progressiveStartByLevel !== "object"){
       Storage.settings.progressiveStartByLevel = {};
     }
+
+    // Cram custom lists (UI)
+    if (!Storage.ui.cramLists || typeof Storage.ui.cramLists !== "object") Storage.ui.cramLists = {};
+    Object.keys(Storage.ui.cramLists).forEach(name=>{
+      const arr = Array.isArray(Storage.ui.cramLists[name]) ? Storage.ui.cramLists[name] : [];
+      const seen = new Set();
+      Storage.ui.cramLists[name] = arr.map(x=>String(x)).filter(x=>{
+        if (!x) return false;
+        if (seen.has(x)) return false;
+        seen.add(x);
+        return true;
+      });
+    });
   }
   migrate();
 
   Storage.saveUi = () => {
     saveJSON(CONST.STORAGE_KEYS.FILTERS, Storage.ui.filters);
     saveJSON(CONST.STORAGE_KEYS.EXPANDED, Storage.ui.expanded);
+    saveJSON(CONST.STORAGE_KEYS.CRAM_LISTS, Storage.ui.cramLists);
   };
 
   Storage.saveSettings = () => saveJSON(CONST.STORAGE_KEYS.SETTINGS, Storage.settings);
@@ -108,6 +123,7 @@
     if (parsed.ui){
       if (parsed.ui.filters) Storage.ui.filters = parsed.ui.filters;
       if (parsed.ui.expanded) Storage.ui.expanded = parsed.ui.expanded;
+      if (parsed.ui.cramLists) Storage.ui.cramLists = parsed.ui.cramLists;
     }
 
     migrate();
@@ -116,5 +132,185 @@
     Storage.saveUi();
   };
 
+
+
+  function normalizeIncoming(parsed){
+    // Supports full exports, partial exports, and older shapes.
+    // Returns a canonical object with nulls for missing sections.
+    const out = {
+      meta: (parsed && typeof parsed === "object") ? (parsed.meta || null) : null,
+      seenExamples: null,
+      notesByGrammar: null,
+      scoresByExample: null,
+      settings: null,
+      ui: null,
+      heatmap: null
+    };
+    if (!parsed || typeof parsed !== "object") return out;
+
+    // Some old exports nest inside userData
+    const srcUser = (parsed.userData && typeof parsed.userData === "object") ? parsed.userData : parsed;
+
+    const seen = srcUser.seenExamples || srcUser.stars || parsed.seenExamples || parsed.stars;
+    const notes = srcUser.notesByGrammar || parsed.notesByGrammar;
+    const scores = srcUser.scoresByExample || parsed.scoresByExample;
+
+    if (seen && typeof seen === "object") out.seenExamples = seen;
+    if (notes && typeof notes === "object") out.notesByGrammar = notes;
+    if (scores && typeof scores === "object") out.scoresByExample = scores;
+
+    const settings = parsed.settings || srcUser.settings;
+    if (settings && typeof settings === "object") out.settings = settings;
+
+    const ui = parsed.ui || srcUser.ui || {
+      filters: parsed.filters || srcUser.filters,
+      expanded: parsed.expanded || srcUser.expanded,
+      cramLists: parsed.cramLists || srcUser.cramLists
+    };
+    if (ui && typeof ui === "object") out.ui = ui;
+
+    if (parsed.heatmap && typeof parsed.heatmap === "object") out.heatmap = parsed.heatmap;
+
+    return out;
+  }
+
+  Storage.inspectPayload = (parsed) => {
+    const n = normalizeIncoming(parsed);
+    const isObj = (x)=>!!x && typeof x === "object";
+    return {
+      normalized: n,
+      hasSeen: isObj(n.seenExamples),
+      hasNotes: isObj(n.notesByGrammar),
+      hasScores: isObj(n.scoresByExample),
+      hasSettings: isObj(n.settings),
+      hasUi: isObj(n.ui) && (isObj(n.ui.filters) || isObj(n.ui.expanded)),
+      hasCramLists: isObj(n.ui) && isObj(n.ui.cramLists),
+      hasHeatmap: isObj(n.heatmap)
+    };
+  };
+
+  function mergeObjectAddMissing(target, incoming){
+    if (!incoming || typeof incoming !== "object") return;
+    Object.keys(incoming).forEach(k=>{
+      if (target[k] === undefined) target[k] = incoming[k];
+    });
+  }
+
+  function mergeSeenExamples(target, incoming){
+    if (!incoming || typeof incoming !== "object") return;
+    Object.keys(incoming).forEach(id=>{
+      if (target[id] === undefined) target[id] = !!incoming[id];
+    });
+  }
+
+  function mergeScores(target, incoming){
+    if (!incoming || typeof incoming !== "object") return;
+    Object.keys(incoming).forEach(id=>{
+      if (target[id] === undefined) target[id] = incoming[id];
+    });
+  }
+
+  function mergeNotes(target, incoming){
+    if (!incoming || typeof incoming !== "object") return;
+    Object.keys(incoming).forEach(gk=>{
+      const incArr = Array.isArray(incoming[gk]) ? incoming[gk] : [];
+      if (!target[gk]){
+        target[gk] = incArr;
+        return;
+      }
+      const curArr = Array.isArray(target[gk]) ? target[gk] : [];
+      const seen = new Set(curArr.map(n=>`${n?.jpHtml||""}|||${n?.enHtml||""}`));
+      incArr.forEach(n=>{
+        const key = `${n?.jpHtml||""}|||${n?.enHtml||""}`;
+        if (!seen.has(key)){
+          seen.add(key);
+          curArr.push(n)
+        }
+      });
+      target[gk] = curArr;
+    });
+  }
+
+  function mergeCramLists(target, incoming){
+    if (!incoming || typeof incoming !== "object") return;
+    Object.keys(incoming).forEach(name=>{
+      const incArr = Array.isArray(incoming[name]) ? incoming[name].map(String) : [];
+      if (!target[name]){
+        target[name] = incArr;
+        return;
+      }
+      const curArr = Array.isArray(target[name]) ? target[name].map(String) : [];
+      const set = new Set(curArr);
+      incArr.forEach(k=>{ if (k && !set.has(k)) { set.add(k); curArr.push(k); } });
+      target[name] = curArr;
+    });
+  }
+
+  Storage.importSelected = (parsed, opts) => {
+    if (!parsed || typeof parsed !== "object") return;
+    const mode = (opts && opts.mode === "merge") ? "merge" : "overwrite";
+    const include = (opts && opts.include) ? opts.include : {};
+    const n = normalizeIncoming(parsed);
+
+    // User data
+    if (include.seen && n.seenExamples){
+      if (mode === "overwrite") Storage.userData.seenExamples = n.seenExamples;
+      else mergeSeenExamples(Storage.userData.seenExamples, n.seenExamples);
+    }
+    if (include.notes && n.notesByGrammar){
+      if (mode === "overwrite") Storage.userData.notesByGrammar = n.notesByGrammar;
+      else {
+        Storage.userData.notesByGrammar = Storage.userData.notesByGrammar || {};
+        // Add only missing sentences; avoid duplicates by jp+en content
+        Object.keys(n.notesByGrammar).forEach(gk=>{
+          const incArr = Array.isArray(n.notesByGrammar[gk]) ? n.notesByGrammar[gk] : [];
+          const curArr = Array.isArray(Storage.userData.notesByGrammar[gk]) ? Storage.userData.notesByGrammar[gk] : [];
+          const seen = new Set(curArr.map(x=>`${x?.jpHtml||""}|||${x?.enHtml||""}`));
+          incArr.forEach(x=>{
+            const key = `${x?.jpHtml||""}|||${x?.enHtml||""}`;
+            if (!seen.has(key)){
+              seen.add(key);
+              curArr.push(x);
+            }
+          });
+          Storage.userData.notesByGrammar[gk] = curArr;
+        });
+      }
+    }
+    if (include.scores && n.scoresByExample){
+      if (mode === "overwrite") Storage.userData.scoresByExample = n.scoresByExample;
+      else mergeScores(Storage.userData.scoresByExample, n.scoresByExample);
+    }
+
+    // Settings
+    if (include.settings && n.settings){
+      if (mode === "overwrite") Storage.settings = { ...Storage.settings, ...n.settings };
+      else {
+        Storage.settings = Storage.settings || {};
+        mergeObjectAddMissing(Storage.settings, n.settings);
+      }
+    }
+
+    // UI
+    if (include.ui && n.ui){
+      if (n.ui.filters && typeof n.ui.filters === "object"){
+        if (mode === "overwrite") Storage.ui.filters = n.ui.filters;
+        else mergeObjectAddMissing(Storage.ui.filters, n.ui.filters);
+      }
+      if (n.ui.expanded && typeof n.ui.expanded === "object"){
+        if (mode === "overwrite") Storage.ui.expanded = n.ui.expanded;
+        else mergeObjectAddMissing(Storage.ui.expanded, n.ui.expanded);
+      }
+    }
+    if (include.cramLists && n.ui && n.ui.cramLists){
+      if (mode === "overwrite") Storage.ui.cramLists = n.ui.cramLists;
+      else mergeCramLists(Storage.ui.cramLists, n.ui.cramLists);
+    }
+
+    migrate();
+    Storage.saveUserData();
+    Storage.saveSettings();
+    Storage.saveUi();
+  };
   window.App.Storage = Storage;
 })();

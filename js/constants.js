@@ -16,7 +16,9 @@
       EXPANDED: "jlpt-expanded-sections",
       USERDATA: "jlpt-user-data",
       SETTINGS: "jlpt-global-settings",
-      HEATMAP: "jlpt-heatmap-state"
+      HEATMAP: "jlpt-heatmap-state",
+      CRAM_LISTS: "jlpt-cram-custom-lists",
+      CRAM_SESSION: "jlpt-cram-session"
     },
 
     LEVEL_COLORS: {

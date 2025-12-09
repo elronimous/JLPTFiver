@@ -129,6 +129,50 @@
     try { ta.setSelectionRange(caret, caret); } catch {}
   }
 
+  function notesInsertHtmlAtCaret(el, insertHtml){
+    const target = el;
+    try { target.focus(); } catch {}
+    const sel = window.getSelection();
+    let range = null;
+    if (sel && sel.rangeCount){
+      range = sel.getRangeAt(0);
+      if (!target.contains(range.commonAncestorContainer)){
+        range = document.createRange();
+        range.selectNodeContents(target);
+        range.collapse(false);
+      }
+    } else {
+      range = document.createRange();
+      range.selectNodeContents(target);
+      range.collapse(false);
+    }
+
+    range.deleteContents();
+    const frag = range.createContextualFragment(String(insertHtml||""));
+    const last = frag.lastChild;
+    range.insertNode(frag);
+
+    if (sel){
+      const r = document.createRange();
+      if (last){
+        r.setStartAfter(last);
+      } else {
+        r.selectNodeContents(target);
+      }
+      r.collapse(true);
+      sel.removeAllRanges();
+      sel.addRange(r);
+    }
+  }
+  function notesClipboardToInlineHtml(e, level){
+    const markup = notesClipboardToImportText(e);
+    // Convert #...# markup into styled spans (no clipboard formatting is kept).
+    let html = toHighlightedHtml(markup, level);
+    // Preserve line breaks if any
+    html = html.replace(/\n/g, "<br>");
+    return html;
+  }
+
 
   function toHighlightedHtml(raw, level){
     const color = CONST.LEVEL_COLORS[level] || "#e5e7eb";
@@ -445,7 +489,26 @@
           const bind = (el)=>{
             el.addEventListener("input", syncFromDOM);
             el.addEventListener("blur", syncFromDOM);
-            el.addEventListener("paste", ()=>setTimeout(syncFromDOM,0));
+            el.addEventListener("paste", (e)=>{
+              // For JP/EN single-line editors: paste as plain text (no formatting),
+              // but still support Bunpro-style highlights via #...# markup conversion.
+              try{
+                if (!e.clipboardData) return;
+                e.preventDefault();
+                const html = notesClipboardToInlineHtml(e, level);
+                notesInsertHtmlAtCaret(el, html);
+                setTimeout(syncFromDOM,0);
+              } catch {
+                // If anything goes wrong, fall back to plain text paste.
+                try{
+                  e.preventDefault();
+                  const plain = e.clipboardData.getData("text/plain") || "";
+                  const safe = Utils.escapeHtml(String(plain||"")).replace(/\n/g, "<br>");
+                  notesInsertHtmlAtCaret(el, safe);
+                  setTimeout(syncFromDOM,0);
+                } catch {}
+              }
+            });
           };
           bind(jp); bind(en);
         }
