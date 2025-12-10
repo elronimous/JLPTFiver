@@ -10,7 +10,7 @@
 
   // Convert Bunpro HTML (span.text-primary-accent / <strong> / <b>) into plain text with #...# highlights.
   // Also used by the bulk notes importer paste handler.
-  const NOTES_MARK_SELECTOR = "span.text-primary-accent, strong, b";
+  const NOTES_MARK_SELECTOR = "span.text-primary-accent, span.jlptfiver-hl, span[data-jlptfiver-hl], span[style*=\'font-weight:800\'][style*=\'color\'], span[style*=\'font-weight: 800\'][style*=\'color\'], strong, b";
 
   function notesSanitizeHtml(html){
     const parser = new DOMParser();
@@ -105,6 +105,9 @@
       // Only "Bunpro-style" convert when those mark elements exist.
       const hasMarkElements =
         /text-primary-accent/i.test(safeHtml) ||
+        /\bjlptfiver-hl\b/i.test(safeHtml) ||
+        /data-jlptfiver-hl/i.test(safeHtml) ||
+        ((/font-weight\s*:\s*800/i.test(safeHtml)) && (/color\s*:/i.test(safeHtml))) ||
         /<(strong|b)\b/i.test(safeHtml);
 
       if (hasMarkElements) {
@@ -180,7 +183,7 @@
     let out = "";
     for (let i=0;i<parts.length;i++){
       const seg = Utils.escapeHtml(parts[i]);
-      if (i % 2 === 1) out += `<span style="color:${color};font-weight:800">${seg}</span>`;
+      if (i % 2 === 1) out += `<span class="jlptfiver-hl" data-jlptfiver-hl="1" style="color:${color};font-weight:800">${seg}</span>`;
       else out += seg;
     }
     return out;
@@ -206,6 +209,8 @@
     try{
       // Keep your styling consistent with importer: colour + font-weight:800
       const span = document.createElement("span");
+      span.classList.add("jlptfiver-hl");
+      span.setAttribute("data-jlptfiver-hl","1");
       span.style.color = color;
       span.style.fontWeight = "800";
       range.surroundContents(span);
