@@ -36,6 +36,7 @@
 
         <button id="openViewAllBtn" class="chip-btn">View All</button>
         <button id="openCramBtn" class="chip-btn">Cram</button>
+        <button id="openSrsBtn" class="chip-btn">SRS</button>
       </div>
     </header>
 
@@ -98,6 +99,7 @@
             <span class="viewall-filter-label">Show:</span>
             <button id="viewAllFilterSeen" class="viewall-starfilter-btn" title="Starred only" aria-label="Starred only">★</button>
             <button id="viewAllFilterUnseen" class="viewall-starfilter-btn" title="Unstarred only" aria-label="Unstarred only">☆</button>
+            <button id="viewAllFilterSrs" class="viewall-starfilter-btn viewall-srsfilter-btn" title="In SRS only" aria-label="In SRS only">SRS</button>
           </div>
         </div>
         <button id="closeViewAllBtn" class="modal-close-btn" aria-label="Close">✕</button>
@@ -136,6 +138,12 @@
         <label class="settings-row" for="toggleEmojiScores">
           <input id="toggleEmojiScores" type="checkbox" />
           <span>Use Emoji Score system</span>
+        </label>
+
+        <div class="settings-section-title">SRS</div>
+        <label class="settings-row" for="toggleSrsEnabled">
+          <input id="toggleSrsEnabled" type="checkbox" />
+          <span>Enable SRS scheduling (use SRS instead of self-rating emojis)</span>
         </label>
 
         <div class="settings-section-title">Grammar Order</div>
@@ -186,10 +194,12 @@
           <label class="settings-row" for="exSeen"><input id="exSeen" type="checkbox" checked /> <span>Stars / Seen items</span></label>
           <label class="settings-row" for="exNotes"><input id="exNotes" type="checkbox" checked /> <span>Custom sentences (Notes)</span></label>
           <label class="settings-row" for="exScores"><input id="exScores" type="checkbox" checked /> <span>Emoji scores</span></label>
+          <label class="settings-row" for="exSrs"><input id="exSrs" type="checkbox" checked /> <span>SRS (cards + FSRS settings)</span></label>
           <label class="settings-row" for="exSettings"><input id="exSettings" type="checkbox" checked /> <span>App settings</span></label>
           <label class="settings-row" for="exHeatmap"><input id="exHeatmap" type="checkbox" checked /> <span>Study Log (heatmap)</span></label>
           <label class="settings-row" for="exUi"><input id="exUi" type="checkbox" checked /> <span>UI (filters + expanded sections)</span></label>
           <label class="settings-row" for="exCramLists"><input id="exCramLists" type="checkbox" checked /> <span>Custom cram lists</span></label>
+          <label class="settings-row" for="exCramSession"><input id="exCramSession" type="checkbox" checked /> <span>Saved cram session (resume)</span></label>
         </div>
 
         <div class="modal-actions">
@@ -223,10 +233,12 @@
           <label class="settings-row" for="imSeen"><input id="imSeen" type="checkbox" /> <span>Stars / Seen items</span></label>
           <label class="settings-row" for="imNotes"><input id="imNotes" type="checkbox" /> <span>Custom sentences (Notes)</span></label>
           <label class="settings-row" for="imScores"><input id="imScores" type="checkbox" /> <span>Emoji scores</span></label>
+          <label class="settings-row" for="imSrs"><input id="imSrs" type="checkbox" /> <span>SRS (cards + FSRS settings)</span></label>
           <label class="settings-row" for="imSettings"><input id="imSettings" type="checkbox" /> <span>App settings</span></label>
           <label class="settings-row" for="imHeatmap"><input id="imHeatmap" type="checkbox" /> <span>Study Log (heatmap)</span></label>
           <label class="settings-row" for="imUi"><input id="imUi" type="checkbox" /> <span>UI (filters + expanded sections)</span></label>
           <label class="settings-row" for="imCramLists"><input id="imCramLists" type="checkbox" /> <span>Custom cram lists</span></label>
+          <label class="settings-row" for="imCramSession"><input id="imCramSession" type="checkbox" /> <span>Saved cram session (resume)</span></label>
         </div>
 
         <div class="modal-actions">
@@ -256,6 +268,7 @@
           <label class="settings-row" for="delSeen"><input id="delSeen" type="checkbox" checked /> <span>Stars / Seen items</span></label>
           <label class="settings-row" for="delNotes"><input id="delNotes" type="checkbox" checked /> <span>Custom sentences (Notes)</span></label>
           <label class="settings-row" for="delScores"><input id="delScores" type="checkbox" checked /> <span>Emoji scores</span></label>
+          <label class="settings-row" for="delSrs"><input id="delSrs" type="checkbox" checked /> <span>Reset SRS (all SRS cards)</span></label>
           <label class="settings-row" for="delSettings"><input id="delSettings" type="checkbox" checked /> <span>App settings</span></label>
           <label class="settings-row" for="delHeatmap"><input id="delHeatmap" type="checkbox" checked /> <span>Study Log (heatmap)</span></label>
           <label class="settings-row" for="delUi"><input id="delUi" type="checkbox" checked /> <span>UI (filters + expanded sections)</span></label>
@@ -349,8 +362,6 @@
 
       <div class="modal-body">
         <div class="cram-controls">
-          <input id="cramSearch" class="viewall-search" placeholder="Search grammar / meaning…" />
-
           <div class="cram-filter-row">
             <div class="cram-filter-group">
               <div class="viewall-filter-label">Levels</div>
@@ -365,12 +376,47 @@
               </div>
             </div>
 
-            <div class="cram-filter-group">
-              <div class="viewall-filter-label">Score range</div>
-              <div class="cram-score-range">
-                <select id="cramScoreMin" class="cram-select"></select>
-                <span style="opacity:.7">to</span>
-                <select id="cramScoreMax" class="cram-select"></select>
+            <div class="cram-filter-group" id="cramSrsFilterGroup" hidden>
+              <div class="viewall-filter-label">SRS</div>
+              <div class="cram-stars">
+                <button class="cram-star-btn active" data-srs="any">Any</button>
+                <button class="cram-star-btn" data-srs="only">In SRS</button>
+                <button id="cramSrsDifficultyBtn" class="cram-star-btn" type="button">Difficulty</button>
+              </div>
+
+              <div id="cramSrsDifficultyPanel" class="cram-diff-panel" hidden>
+                <div class="cram-diff-head">
+                  <div id="cramSrsDifficultyText" class="modal-hint" style="margin:0">Difficulty: ALL</div>
+                  <div class="cram-diff-actions">
+                    <button id="cramSrsDifficultySelectBtn" class="cram-mini-btn" type="button">Select matches</button>
+                    <button id="cramSrsDifficultyResetBtn" class="cram-mini-btn" type="button">Reset</button>
+                  </div>
+                </div>
+
+                <div class="cram-diff-sliders" aria-label="Select SRS items by difficulty">
+                  <div class="cram-diff-row cram-diff-toprow">
+                    <span class="cram-diff-row-label">Hard</span>
+                    <span id="cramSrsDifficultyHardVal" class="cram-diff-num" aria-label="Hard bound value">10.00</span>
+                    <span class="cram-diff-spacer" aria-hidden="true"></span>
+                    <span id="cramSrsDifficultyEasyVal" class="cram-diff-num" aria-label="Easy bound value">01.00</span>
+                    <span class="cram-diff-row-label">Easy</span>
+                  </div>
+
+                  <div id="cramSrsDifficultyDual" class="cram-diff-dual" aria-label="Difficulty range slider">
+                    <input id="cramSrsDifficultyMin" class="cram-diff-range dual" type="range" min="1" max="10" step="0.1" value="1" list="cramSrsDifficultyMarks" aria-label="Harder bound" />
+                    <input id="cramSrsDifficultyMax" class="cram-diff-range dual" type="range" min="1" max="10" step="0.1" value="10" list="cramSrsDifficultyMarks" aria-label="Easier bound" />
+                  </div>
+
+                  <datalist id="cramSrsDifficultyMarks">
+                    <option value="1" label="Hard"></option>
+                    <option value="3"></option>
+                    <option value="5"></option>
+                    <option value="7"></option>
+                    <option value="10" label="Easy"></option>
+                  </datalist>
+                </div>
+                <div class="modal-hint" style="margin:.15rem 0 0 0">Harder ⟵ drag handles ⟶ Easier</div>
+
               </div>
             </div>
 
@@ -412,12 +458,143 @@
           </div>
         </div>
 
+
+        <div class="cram-list-toolbar">
+          <button id="cramCollapseBtn" class="cram-mini-btn cram-collapse-btn" type="button" title="Collapse/expand filters">▴</button>
+          <input id="cramSearch" class="viewall-search cram-search" placeholder="Search grammar / meaning…" />
+        </div>
+
         <div id="cramList" class="cram-list"></div>
       </div>
     </div>
   </div>
 
-  <!-- CRAM resume prompt -->
+  
+  
+  <!-- SRS stats modal -->
+  <div id="srsStatsBackdrop" class="modal-backdrop" hidden>
+    <div class="modal">
+      <div class="modal-header">
+        <div class="modal-title">SRS Overview</div>
+        <div class="modal-header-actions" style="display:flex;align-items:center;gap:.35rem">
+          <button id="srsEditFsrsBtn" class="modal-close-btn" type="button" aria-label="Edit FSRS settings" title="Edit FSRS settings">⚙</button>
+          <button id="srsStatsCloseBtn" class="modal-close-btn" aria-label="Close">✕</button>
+        </div>
+      </div>
+      <div class="modal-body">
+        <div id="srsStatsSummary" class="modal-hint" style="margin-bottom:.8rem"></div>
+        <div class="srs-counts-row">
+          <div class="srs-count-pill">
+            <div class="label">New cards</div>
+            <div id="srsNewCount" class="value">0</div>
+          </div>
+          <div class="srs-count-pill">
+            <div class="label">Review cards</div>
+            <div id="srsReviewCount" class="value">0</div>
+          </div>
+        </div>
+        <div class="modal-actions" style="margin-top:.6rem">
+          <button id="srsStartNewBtn" class="modal-btn primary" type="button">
+            Start newly selected items?
+          </button>
+          <button id="srsReviewDueBtn" class="modal-btn" type="button">
+            Review Due content
+          </button>
+        </div>
+        <div id="srsStatsGraph" class="srs-graph" style="margin-top:.8rem"></div>
+      </div>
+    </div>
+  </div>
+
+
+  <!-- FSRS settings modal -->
+  <div id="fsrsSettingsBackdrop" class="modal-backdrop" hidden>
+    <div class="modal">
+      <div class="modal-header">
+        <div class="modal-title">FSRS settings</div>
+        <button id="fsrsSettingsCloseBtn" class="modal-close-btn" aria-label="Close">✕</button>
+      </div>
+      <div class="modal-body">
+        <div id="fsrsSettingsHint" class="modal-hint" style="margin-bottom:.8rem"></div>
+
+        <div id="fsrsSettingsForm" style="display:grid;grid-template-columns:1fr auto;gap:.55rem .9rem;align-items:center">
+          <div class="modal-hint" style="margin:0">Stability growth rate</div>
+          <input id="fsrsGrowthRate" type="number" step="0.01" min="0.01" max="1" style="width:7rem" />
+
+          <div class="modal-hint" style="margin:0">Lapse penalty (stability ×)</div>
+          <input id="fsrsLapsePenalty" type="number" step="0.01" min="0.05" max="1" style="width:7rem" />
+
+          <div class="modal-hint" style="margin:0">Difficulty increase on wrong</div>
+          <input id="fsrsDiffUp" type="number" step="0.01" min="0" max="5" style="width:7rem" />
+
+          <div class="modal-hint" style="margin:0">Difficulty decrease on right</div>
+          <input id="fsrsDiffDown" type="number" step="0.01" min="0" max="5" style="width:7rem" />
+
+          <div class="modal-hint" style="margin:0">Initial stability (first right)</div>
+          <input id="fsrsInitStabGood" type="number" step="0.1" min="0.1" max="50" style="width:7rem" />
+
+          <div class="modal-hint" style="margin:0">Initial stability (first wrong)</div>
+          <input id="fsrsInitStabBad" type="number" step="0.1" min="0.1" max="50" style="width:7rem" />
+
+          <div class="modal-hint" style="margin:0">Maximum interval (days)</div>
+          <input id="fsrsMaxInterval" type="number" step="1" min="1" max="99999" style="width:7rem" />
+        
+
+          <div class="modal-hint" style="margin:0">
+            <label style="display:flex;align-items:center;gap:.45rem;margin:0;cursor:pointer">
+              <input id="fsrsRetireEnabled" type="checkbox" />
+              Retire grammar cards after interval (days)
+            </label>
+          </div>
+          <input id="fsrsRetireAfterDays" type="number" step="1" min="1" max="99999" style="width:7rem" />
+</div>
+
+        <div class="modal-actions" style="margin-top:1rem">
+          <button id="fsrsResetBtn" class="modal-btn" type="button">Reset defaults</button>
+          <button id="fsrsAutoAdjustBtn" class="modal-btn primary" type="button">
+            Auto-adjust FSRS to match your history
+          </button>
+          <button id="fsrsSaveBtn" class="modal-btn" type="button">Done</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- SRS toggle modal -->
+  <div id="srsToggleBackdrop" class="modal-backdrop" hidden>
+    <div class="modal">
+      <div class="modal-header">
+        <div class="modal-title">Modify SRS item</div>
+        <button id="srsToggleCancelBtn" class="modal-close-btn" type="button" aria-label="Close">✕</button>
+      </div>
+      <div class="modal-body">
+        <div class="modal-hint" style="margin-bottom:.8rem">
+          What would you like to do with this grammar point?
+        </div>
+
+        <div id="srsToggleStats" class="srs-toggle-stats" style="margin:.2rem 0 1rem">
+          <!-- filled by JS -->
+        </div>
+        <div class="modal-actions">
+          <button id="srsToggleKeepBtn" class="modal-btn primary" type="button">
+            Disable SRS and keep history for later
+          </button>
+          <button id="srsTogglePullTodayBtn" class="modal-btn" type="button">
+            Pull next review to today
+          </button>
+          <button id="srsToggleKnownBtn" class="modal-btn" type="button">
+            Mark as known
+          </button>
+          <button id="srsToggleDeleteBtn" class="modal-btn danger" type="button">
+            Delete all study history for this item
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+
+<!-- CRAM resume prompt -->
   <div id="cramResumeBackdrop" class="modal-backdrop" hidden>
     <div class="modal">
       <div class="modal-header">
@@ -442,7 +619,6 @@
         <div id="cramScoreText" class="cram-session-stat">Wrong 0 • Right 0</div>
       </div>
       <div class="cram-session-actions">
-        <button id="cramSaveBtn" class="chip-btn primary" type="button">Save progress</button>
         <button id="cramQuitBtn" class="chip-btn" type="button">✕ Quit</button>
       </div>
     </div>
@@ -452,9 +628,66 @@
       <div class="cram-actions">
         <button id="cramWrongBtn" class="cram-action wrong">WRONG</button>
         <button id="cramRightBtn" class="cram-action right">RIGHT</button>
+        <button id="cramUndoBtn" class="cram-action undo" type="button" disabled>UNDO</button>
         <button id="cramNextBtn" class="cram-action next" hidden>NEXT</button>
       </div>
+      <div id="cramCompleteQuitRow" class="session-complete-quit" hidden>
+        <button id="cramCompleteQuitBtn" class="chip-btn session-complete-quit-btn" type="button">✕ Quit</button>
+      </div>
+
       <div id="cramFlipHint" class="modal-hint" style="text-align:center;margin-top:.6rem">
+        Click the card to flip.
+      </div>
+    </div>
+  </div>
+
+
+  <!-- SRS session overlay -->
+  <div id="srsSessionOverlay" class="cram-session" hidden>
+    <div class="cram-session-top">
+      <div class="cram-session-stats">
+        <div id="srsProgressText" class="cram-session-stat">Remaining 0 / 0</div>
+        <div id="srsScoreText" class="cram-session-stat">Wrong 0 • Right 0</div>
+      </div>
+      <div class="cram-session-actions">
+        <button id="srsStatsBtn" class="chip-btn" type="button">Stats</button>
+        <button id="srsQuitBtn" class="chip-btn" type="button">✕ Quit</button>
+      </div>
+    </div>
+
+    <div class="srs-options-row">
+      <div class="srs-left-col">
+        <div class="srs-mode-group">
+          <div class="viewall-filter-label">Drill mode</div>
+          <div class="srs-mode-buttons">
+            <button id="srsModeGrammar" class="chip-btn srs-mode-btn" type="button">Grammar</button>
+            <button id="srsModeSentences" class="chip-btn srs-mode-btn" type="button">Sentences</button>
+          </div>
+        </div>
+
+        <div class="srs-count-group">
+          <div class="viewall-filter-label">Sentences per grammar</div>
+          <div class="srs-count-row">
+            <input id="srsExamplesPerGrammar" class="cram-select cram-number" type="number" min="1" max="10" step="1" value="3" />
+            <button id="srsExamplesAllBtn" class="chip-btn srs-all-btn" type="button" title="Use all available sentences">ALL</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="cram-card-wrap">
+      <div id="srsCard" class="cram-card" tabindex="0" role="button" aria-label="SRS flashcard"></div>
+      <div class="cram-actions">
+        <button id="srsWrongBtn" class="cram-action wrong">WRONG</button>
+        <button id="srsRightBtn" class="cram-action right">RIGHT</button>
+        <button id="srsUndoBtn" class="cram-action undo" type="button" disabled>UNDO</button>
+        <button id="srsNextBtn" class="cram-action next" hidden>NEXT</button>
+      </div>
+      <div id="srsCompleteQuitRow" class="session-complete-quit" hidden>
+        <button id="srsCompleteQuitBtn" class="chip-btn session-complete-quit-btn" type="button">✕ Quit</button>
+      </div>
+
+      <div id="srsFlipHint" class="modal-hint" style="text-align:center;margin-top:.6rem">
         Click the card to flip.
       </div>
     </div>
@@ -485,6 +718,7 @@ N4,5,どんどん,dondon,"Progressively, Rapidly increasing, More and more",http
   <script src="js/viewall.js"></script>
   <script src="js/daily.js"></script>
   <script src="js/cram.js"></script>
+  <script src="js/srs.js"></script>
   <script src="js/main.js"></script>
 </body>
 </html>

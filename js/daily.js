@@ -84,28 +84,82 @@
           `<a href="${link}" target="_blank" rel="noopener" class="extra-link" title="Link ${i+2}">↗</a>`
         ).join("");
 
+        const srsArr = Array.isArray(Storage.userData?.srs?.grammarKeys) ? Storage.userData.srs.grammarKeys : [];
+        const inSrs = srsArr.includes(grammarKey);
+        const cardsByKey = (Storage.userData?.srs && Storage.userData.srs.cardsByKey) || {};
+        const cardState = cardsByKey[grammarKey];
+        const perf = inSrs && cardState && typeof cardState.performance === "number" && Number.isFinite(cardState.performance)
+          ? cardState.performance
+          : null;
+
         const card = document.createElement("div");
         card.className = "grammar-item";
+        const settings = Storage.settings || {};
+        const srsUiEnabled = !!settings.srsEnabled;
+
+        let srsButtonHtml = "";
+        if (srsUiEnabled){
+          if (inSrs && window.App.SRS && typeof window.App.SRS.getEmojiForKey === "function"){
+            const e = window.App.SRS.getEmojiForKey(grammarKey);
+            const emoji = e && e.emoji ? e.emoji : (window.App.CONST?.SCORE_EMOJIS?.[0] || "🌑");
+            const tip = e && e.title ? e.title : "In SRS";
+            srsButtonHtml = `<button class="srs-add-btn srs-added" type="button" title="${Utils.escapeHtml(tip)}">${emoji}</button>`;
+          } else {
+            srsButtonHtml = `<button class="srs-add-btn${inSrs ? " srs-added":""}" type="button" title="${inSrs ? "In SRS" : "Add to SRS"}">＋</button>`;
+          }
+        }
+
         card.innerHTML = `
           <div class="grammar-main-area">
             <div class="grammar-info">
               <div class="grammar-main">${grammarLink}${extraLinkIcons}</div>
               <div class="grammar-meaning">${Utils.escapeHtml(item.meaning||"")}</div>
-            </div>
-            <div class="grammar-right-controls">
+            </div>            <div class="grammar-right-controls">
+              ${srsButtonHtml}
               <span class="star-toggle ${seen ? "seen":""}" title="Mark as seen">★</span>
             </div>
           </div>
         `;
 
         const controls = card.querySelector(".grammar-right-controls");
+        const srsBtn = card.querySelector(".srs-add-btn");
         const starEl = card.querySelector(".star-toggle");
-        const scoreWrap = Scores.build(exampleId);
-        controls.insertBefore(scoreWrap, starEl);
+
+        // Only show self-rating emoji scores when SRS scheduling is OFF.
+        if (!!settings.scoresEnabled && !srsUiEnabled){
+          const scoreWrap = Scores.build(exampleId);
+          controls.insertBefore(scoreWrap, starEl);
+        }
+
 
         const notes = Notes.buildEditor({ level:item.level, grammarKey });
         notes.section.hidden = true;
         card.appendChild(notes.section);
+
+        if (srsBtn){
+          srsBtn.addEventListener("click",(ev)=>{
+            ev.stopPropagation();
+            const srsApi = window.App.SRS;
+            if (!srsApi) return;
+            const inSrsNow = srsApi.hasGrammarKey && srsApi.hasGrammarKey(grammarKey);
+            if (!inSrsNow){
+              const added = srsApi.addGrammarKey(grammarKey);
+              if (added){
+                srsBtn.classList.add("srs-added");
+                if (srsApi.getEmojiForKey){
+                  const e = srsApi.getEmojiForKey(grammarKey);
+                  if (e && e.emoji) srsBtn.textContent = e.emoji;
+                  if (e && e.title) srsBtn.title = e.title;
+                  else srsBtn.title = "In SRS";
+                } else {
+                  srsBtn.title = "In SRS";
+                }
+              }
+            }else{
+              srsApi.beginToggle && srsApi.beginToggle(grammarKey, srsBtn);
+            }
+          });
+        }
 
         starEl.addEventListener("click",(ev)=>{
           ev.stopPropagation();
@@ -136,7 +190,7 @@
       outputEl.appendChild(section);
     });
 
-    Scores.applyEnabled(Storage.settings.scoresEnabled);
+    Scores.applyEnabled(Storage.settings.scoresEnabled && !Storage.settings.srsEnabled);
   }
 
   Daily.init = () => { outputEl = Utils.qs("#output"); };

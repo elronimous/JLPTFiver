@@ -23,11 +23,12 @@
     await window.App.Csv.load();
 
     // Init modules
-    window.App.Scores?.applyEnabled(Storage.settings.scoresEnabled);
+    window.App.Scores?.applyEnabled(Storage.settings.scoresEnabled && !Storage.settings.srsEnabled);
     window.App.Notes?.init();
     window.App.Daily?.init();
     window.App.ViewAll?.init();
     window.App.Cram?.init();
+    window.App.SRS?.init();
 
     // Heatmap init (and global alias usage)
     if (window.Heatmap) Heatmap.init();
@@ -52,6 +53,7 @@
     const toggleHeatmapVisible = Utils.qs("#toggleHeatmapVisible");
     const toggleHideEnglishNotes = Utils.qs("#toggleHideEnglishNotes");
     const toggleEmojiScores = Utils.qs("#toggleEmojiScores");
+    const toggleSrsEnabled = Utils.qs("#toggleSrsEnabled");
 
     const toggleProgressiveMode = Utils.qs("#toggleProgressiveMode");
     const progressiveDatesWrap = Utils.qs("#progressiveDatesWrap");
@@ -74,10 +76,12 @@
     const exSeen = Utils.qs("#exSeen");
     const exNotes = Utils.qs("#exNotes");
     const exScores = Utils.qs("#exScores");
+    const exSrs = Utils.qs("#exSrs");
     const exSettings = Utils.qs("#exSettings");
     const exHeatmap = Utils.qs("#exHeatmap");
     const exUi = Utils.qs("#exUi");
     const exCramLists = Utils.qs("#exCramLists");
+    const exCramSession = Utils.qs("#exCramSession");
 
     // Import options modal
     const importOptionsBackdrop = Utils.qs("#importOptionsModalBackdrop");
@@ -91,10 +95,12 @@
     const imSeen = Utils.qs("#imSeen");
     const imNotes = Utils.qs("#imNotes");
     const imScores = Utils.qs("#imScores");
+    const imSrs = Utils.qs("#imSrs");
     const imSettings = Utils.qs("#imSettings");
     const imHeatmap = Utils.qs("#imHeatmap");
     const imUi = Utils.qs("#imUi");
     const imCramLists = Utils.qs("#imCramLists");
+    const imCramSession = Utils.qs("#imCramSession");
 
     // Delete options modal
     const deleteOptionsBackdrop = Utils.qs("#deleteOptionsModalBackdrop");
@@ -105,6 +111,7 @@
     const delSeen = Utils.qs("#delSeen");
     const delNotes = Utils.qs("#delNotes");
     const delScores = Utils.qs("#delScores");
+    const delSrs = Utils.qs("#delSrs");
     const delSettings = Utils.qs("#delSettings");
     const delHeatmap = Utils.qs("#delHeatmap");
     const delUi = Utils.qs("#delUi");
@@ -192,14 +199,23 @@
 
     // Settings modal open/close
     function openSettings(){ settingsBackdrop.hidden = false; }
-    function closeSettings(){ settingsBackdrop.hidden = true; }
+    function closeSettings(){ settingsBackdrop.hidden = true; render(); }
     openSettingsBtn.addEventListener("click", openSettings);
     closeSettingsBtn.addEventListener("click", closeSettings);
     settingsBackdrop.addEventListener("click",(ev)=>{ if (ev.target === settingsBackdrop) closeSettings(); });
 
-    // Apply initial settings UI
+    
+    function applyScoresVisibility(){
+      if (!window.App.Scores) return;
+      window.App.Scores.applyEnabled(Storage.settings.scoresEnabled && !Storage.settings.srsEnabled);
+    }
+
+// Apply initial settings UI
     toggleHideEnglishNotes.checked = !!Storage.settings.hideEnglishDefault;
     toggleEmojiScores.checked = !!Storage.settings.scoresEnabled;
+    if (toggleSrsEnabled) toggleSrsEnabled.checked = !!Storage.settings.srsEnabled;
+
+    applyScoresVisibility();
 
     // Study Log enabled by default
     toggleHeatmapVisible.checked = true;
@@ -221,13 +237,25 @@
     toggleEmojiScores.addEventListener("change", ()=>{
       Storage.settings.scoresEnabled = !!toggleEmojiScores.checked;
       Storage.saveSettings();
-      window.App.Scores.applyEnabled(Storage.settings.scoresEnabled);
+      applyScoresVisibility();
 
       // refresh screens that show score widgets
       render();
       if (!Utils.qs("#viewAllModal").hidden) window.App.ViewAll.open(); // rebuild in-place feel
       window.App.Cram?.refreshIfOpen?.();
     });
+
+    if (toggleSrsEnabled){
+      toggleSrsEnabled.addEventListener("change", ()=>{
+        Storage.settings.srsEnabled = !!toggleSrsEnabled.checked;
+        Storage.saveSettings();
+        applyScoresVisibility();
+        render();
+        if (!Utils.qs("#viewAllModal").hidden) window.App.ViewAll.open();
+        window.App.Cram?.refreshIfOpen?.();
+      });
+    }
+
 
     // Progressive mode UI
     function buildProgressiveGrid(){
@@ -306,13 +334,13 @@
     exportOptionsBackdrop.addEventListener("click", (ev)=>{ if (ev.target === exportOptionsBackdrop) closeExportOptions(); });
 
     function setExportChecks(val){
-      [exSeen, exNotes, exScores, exSettings, exHeatmap, exUi, exCramLists].forEach(cb=>{ if (cb) cb.checked = !!val; });
+      [exSeen, exNotes, exScores, exSrs, exSettings, exHeatmap, exUi, exCramLists, exCramSession].forEach(cb=>{ if (cb) cb.checked = !!val; });
     }
     exportSelectAllBtn.addEventListener("click", ()=>setExportChecks(true));
     exportSelectNoneBtn.addEventListener("click", ()=>setExportChecks(false));
 
     exportSelectedBtn.addEventListener("click", ()=>{
-      const any = !!(exSeen.checked || exNotes.checked || exScores.checked || exSettings.checked || exHeatmap.checked || exUi.checked || exCramLists.checked);
+      const any = !!(exSeen.checked || exNotes.checked || exScores.checked || exSrs.checked || exSettings.checked || exHeatmap.checked || exUi.checked || exCramLists.checked || (exCramSession && exCramSession.checked));
       if (!any){
         alert("Select at least one thing to export.");
         return;
@@ -329,6 +357,7 @@
       if (exSeen.checked) payload.seenExamples = Storage.userData.seenExamples;
       if (exNotes.checked) payload.notesByGrammar = Storage.userData.notesByGrammar;
       if (exScores.checked) payload.scoresByExample = Storage.userData.scoresByExample;
+      if (exSrs.checked) payload.srs = Storage.userData.srs;
       if (exSettings.checked) payload.settings = Storage.settings;
 
       if (exUi.checked || exCramLists.checked){
@@ -346,6 +375,16 @@
         payload.heatmap = Heatmap.exportState();
       }
 
+      if (exCramSession && exCramSession.checked){
+        try{
+          const raw = localStorage.getItem(CONST.STORAGE_KEYS.CRAM_SESSION);
+          if (raw){
+            const parsed = JSON.parse(raw);
+            if (parsed && typeof parsed === "object") payload.cramSession = parsed;
+          }
+        }catch(_e){ /* ignore */ }
+      }
+
       // Give the export a date so multiple backups don't overwrite each other
       const stamp = Utils.dateToYMD(new Date()).replaceAll("-", "");
       downloadJson(payload, `jlptfiver-export-${stamp}.json`);
@@ -361,7 +400,7 @@
     importOptionsBackdrop.addEventListener("click", (ev)=>{ if (ev.target === importOptionsBackdrop) closeImportOptions(); });
 
     function setImportChecks(val){
-      [imSeen, imNotes, imScores, imSettings, imHeatmap, imUi, imCramLists].forEach(cb=>{
+      [imSeen, imNotes, imScores, imSrs, imSettings, imHeatmap, imUi, imCramLists, imCramSession].forEach(cb=>{
         if (!cb) return;
         if (cb.disabled) return;
         cb.checked = !!val;
@@ -377,10 +416,19 @@
       if (inspect.hasSeen) parts.push(`Stars: ${count(n.seenExamples)}`);
       if (inspect.hasNotes) parts.push(`Notes: ${count(n.notesByGrammar)} grammar points`);
       if (inspect.hasScores) parts.push(`Scores: ${count(n.scoresByExample)}`);
+      if (inspect.hasSrs){
+        const gk = Array.isArray(n.srs?.grammarKeys) ? n.srs.grammarKeys.length : 0;
+        const cards = n.srs?.cardsByKey && typeof n.srs.cardsByKey === "object" ? Object.keys(n.srs.cardsByKey).length : 0;
+        parts.push(`SRS: ${gk} items / ${cards} cards`);
+      }
       if (inspect.hasSettings) parts.push(`Settings: ${count(n.settings)} keys`);
       if (inspect.hasUi) parts.push(`UI: ${count(n.ui?.filters)} filters / ${count(n.ui?.expanded)} expanded`);
       if (inspect.hasCramLists) parts.push(`Cram lists: ${count(n.ui?.cramLists)}`);
       if (inspect.hasHeatmap) parts.push(`Study Log: ${count(n.heatmap?.visitedDays)} days`);
+      if (inspect.hasCramSession){
+        const cards = Array.isArray(n.cramSession?.deck) ? n.cramSession.deck.length : 0;
+        parts.push(`Cram session: ${cards} cards`);
+      }
       return parts.length ? `File contains: ${parts.join(" • ")}` : "This file doesn't contain any data I recognise.";
     }
 
@@ -422,7 +470,15 @@
       reader.onload = (e)=>{
         try{
           const parsed = JSON.parse(e.target.result);
-          const inspect = Storage.inspectPayload(parsed);
+          const baseInspect = Storage.inspectPayload(parsed);
+          // Cram session is stored under its own localStorage key, so handle it here.
+          const cs = parsed && typeof parsed === "object" ? parsed.cramSession : null;
+          const hasCramSession = !!(cs && typeof cs === "object" && Array.isArray(cs.deck) && cs.deck.length);
+          const inspect = {
+            ...baseInspect,
+            hasCramSession,
+            normalized: { ...baseInspect.normalized, cramSession: cs }
+          };
           pendingImport = { parsed, inspect };
 
           // Fill summary + enable/disable options based on availability
@@ -435,10 +491,12 @@
           setOpt(imSeen, inspect.hasSeen);
           setOpt(imNotes, inspect.hasNotes);
           setOpt(imScores, inspect.hasScores);
+          setOpt(imSrs, inspect.hasSrs);
           setOpt(imSettings, inspect.hasSettings);
           setOpt(imUi, inspect.hasUi);
           setOpt(imCramLists, inspect.hasCramLists);
           setOpt(imHeatmap, inspect.hasHeatmap);
+          if (imCramSession) setOpt(imCramSession, inspect.hasCramSession);
 
           // Default mode
           importModeOverwrite.checked = true;
@@ -461,11 +519,13 @@
         seen: !!imSeen.checked,
         notes: !!imNotes.checked,
         scores: !!imScores.checked,
+        srs: !!imSrs.checked,
         settings: !!imSettings.checked,
         ui: !!imUi.checked,
         cramLists: !!imCramLists.checked
       };
-      const any = Object.values(include).some(Boolean) || !!imHeatmap.checked;
+      const wantCramSession = !!(imCramSession && imCramSession.checked);
+      const any = Object.values(include).some(Boolean) || !!imHeatmap.checked || wantCramSession;
       if (!any){
         alert("Select at least one thing to import.");
         return;
@@ -485,6 +545,20 @@
         }
       }
 
+      // Cram session import/merge
+      if (wantCramSession && pendingImport.inspect.normalized.cramSession){
+        try{
+          const key = CONST.STORAGE_KEYS.CRAM_SESSION;
+          if (mode === "overwrite"){
+            localStorage.setItem(key, JSON.stringify(pendingImport.inspect.normalized.cramSession));
+          } else {
+            // merge: only import a resumable session if the user doesn't currently have one
+            const cur = localStorage.getItem(key);
+            if (!cur) localStorage.setItem(key, JSON.stringify(pendingImport.inspect.normalized.cramSession));
+          }
+        }catch(_e){ /* ignore */ }
+      }
+
       // Update settings UI
       toggleHideEnglishNotes.checked = !!Storage.settings.hideEnglishDefault;
       toggleEmojiScores.checked = !!Storage.settings.scoresEnabled;
@@ -498,7 +572,7 @@
       }
 
       updateFilterButtons();
-      window.App.Scores.applyEnabled(Storage.settings.scoresEnabled);
+      window.App.Scores.applyEnabled(Storage.settings.scoresEnabled && !Storage.settings.srsEnabled);
       render();
       if (!Utils.qs("#viewAllModal").hidden) window.App.ViewAll.open();
       window.App.Cram?.refreshIfOpen?.();
@@ -507,7 +581,7 @@
     });
     // Delete data (with a checkbox picker)
     function setDeleteChecks(val){
-      [delSeen, delNotes, delScores, delSettings, delHeatmap, delUi, delCramLists, delCramSession].forEach(cb=>{
+      [delSeen, delNotes, delScores, delSrs, delSettings, delHeatmap, delUi, delCramLists, delCramSession].forEach(cb=>{
         if (cb) cb.checked = !!val;
       });
     }
@@ -533,6 +607,7 @@
         { cb: delSeen, label: "Stars / Seen items" },
         { cb: delNotes, label: "Custom sentences (Notes)" },
         { cb: delScores, label: "Emoji scores" },
+        { cb: delSrs, label: "Reset SRS (all SRS cards)" },
         { cb: delSettings, label: "App settings" },
         { cb: delHeatmap, label: "Study Log (heatmap)" },
         { cb: delUi, label: "UI (filters + expanded sections)" },
@@ -563,14 +638,31 @@
       if (delSeen?.checked){ Storage.userData.seenExamples = {}; userDataChanged = true; }
       if (delNotes?.checked){ Storage.userData.notesByGrammar = {}; userDataChanged = true; }
       if (delScores?.checked){ Storage.userData.scoresByExample = {}; userDataChanged = true; }
+      // Keep FSRS tuning when resetting SRS cards, unless we explicitly reset settings elsewhere.
+      if (delSrs?.checked){
+        const keepFsrs = Storage.userData?.srs?.fsrsSettings && typeof Storage.userData.srs.fsrsSettings === "object"
+          ? Storage.userData.srs.fsrsSettings
+          : {};
+        Storage.userData.srs = {
+          cardsByKey: {},
+          grammarKeys: [],
+          mode: "grammar",
+          examplesPerGrammar: 3,
+          examplesPerGrammarAll: false,
+          fsrsSettings: keepFsrs
+        };
+        userDataChanged = true;
+      }
       if (userDataChanged) Storage.saveUserData();
 
       if (delSettings?.checked){
         Storage.settings = {
           hideEnglishDefault: false,
           scoresEnabled: true,
+          srsEnabled: false,
           progressiveEnabled: false,
-          progressiveStartByLevel: {}
+          progressiveStartByLevel: {},
+          cardFontScale: 1
         };
         Storage.saveSettings();
       }

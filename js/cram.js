@@ -3,14 +3,90 @@
   const { CONST, Utils, Storage } = window.App;
 
   const Cram = {};
-  let modalEl, listEl, searchEl, startBtn, selectedCountEl, totalCardsEl, selectedByLevelEl;
+
+  function getCardFontScale(){
+    const s = typeof Storage.settings.cardFontScale === "number" && Number.isFinite(Storage.settings.cardFontScale)
+      ? Storage.settings.cardFontScale
+      : 1;
+    return Math.max(0.6, Math.min(1.6, s));
+  }
+
+  function setCardFontScale(next){
+    const clamped = Math.max(0.6, Math.min(1.6, next));
+    Storage.settings.cardFontScale = clamped;
+    Storage.saveSettings();
+    return clamped;
+  }
+
+  function applyCardFontScale(root){
+    if (!root) return;
+    const scale = getCardFontScale();
+    const baseFront = 1.5;
+    const baseBackJp = 1.3;
+    const baseBackEn = 1.05;
+    root.querySelectorAll(".cram-front").forEach(el=>{
+      el.style.fontSize = (baseFront * scale) + "rem";
+    });
+    root.querySelectorAll(".cram-back .jp").forEach(el=>{
+      el.style.fontSize = (baseBackJp * scale) + "rem";
+    });
+    root.querySelectorAll(".cram-back .en").forEach(el=>{
+      el.style.fontSize = (baseBackEn * scale) + "rem";
+    });
+  }
+
+  function attachCardFontControls(root){
+    if (!root) return;
+    let controls = root.querySelector(".card-font-controls");
+    if (!controls){
+      controls = document.createElement("div");
+      controls.className = "card-font-controls";
+      const dec = document.createElement("button");
+      dec.type = "button";
+      dec.className = "card-font-btn";
+      dec.textContent = "−";
+      const inc = document.createElement("button");
+      inc.type = "button";
+      inc.className = "card-font-btn";
+      inc.textContent = "+";
+      controls.appendChild(dec);
+      controls.appendChild(inc);
+      root.appendChild(controls);
+      dec.addEventListener("click",(ev)=>{
+        ev.stopPropagation();
+        const s = getCardFontScale();
+        setCardFontScale(s - 0.1);
+        applyCardFontScale(root);
+      });
+      inc.addEventListener("click",(ev)=>{
+        ev.stopPropagation();
+        const s = getCardFontScale();
+        setCardFontScale(s + 0.1);
+        applyCardFontScale(root);
+      });
+    }
+    applyCardFontScale(root);
+  }
+
+  let modalEl, listEl, searchEl, startBtn, selectedCountEl, totalCardsEl, selectedByLevelEl, collapseBtnEl;
+  let topCollapsed = false;
   let customListSelectEl, customListNameEl, loadCustomListBtn, addToCustomListBtn, deleteCustomListBtn, saveNewCustomListBtn, customListHintEl;
   let levelFiltersEl;
   let selectTodayBtn, deselectAllBtn;
   let scoreMinEl, scoreMaxEl, itemsPerGrammarEl;
+  let scoreRangeGroupEl, srsFilterGroupEl;
   let starBtns;
+  let cramSrsBtns, cramSrsMode = "any";
 
-  let overlayEl, quitBtn, saveBtn, cardEl, wrongBtn, rightBtn, nextBtn, progressEl, scoreEl;
+  // SRS difficulty selection (Cram selection)
+  let srsDiffBtn, srsDiffPanelEl, srsDiffMinEl, srsDiffMaxEl, srsDiffTextEl, srsDiffResetBtn, srsDiffSelectBtn;
+  let srsDiffHardValEl, srsDiffEasyValEl;
+  let srsDiffDualEl;
+  let srsDiffEnabled = false;
+  let prevSrsModeBeforeDiff = "any";
+
+  let overlayEl, quitBtn, saveBtn, cardEl, wrongBtn, rightBtn, undoBtn, nextBtn, progressEl, scoreEl;
+  let completeQuitRowEl, completeQuitBtnEl;
   let flipHintEl;
 
   // Resume/saved session prompt
@@ -38,7 +114,8 @@
   let totalInitial = 0;
   let showingBack = false;
   let awaitingNext = false; // after marking WRONG, show back + NEXT
-  let hasManualSave = false; // becomes true after "Save progress" or resuming a saved session
+  let hasManualSave = false; // becomes true after saving (via Quit) or resuming a saved session
+  let undoState = null; // last pre-answer snapshot for UNDO
 
   function showSession(on){
     if (!overlayEl) return;
@@ -61,6 +138,164 @@
   function hasExamples(grammarKey){
     const notes = window.App.Notes ? window.App.Notes.getNotes(grammarKey) : [];
     return notes.some(n => Utils.htmlToText(n.jpHtml || "").length > 0);
+  }
+
+function getUsableNotes(grammarKey){
+  const notes = window.App.Notes ? window.App.Notes.getNotes(grammarKey) : [];
+  return notes
+    .map(n => ({ jpHtml: n.jpHtml || "", enHtml: n.enHtml || "" }))
+    .filter(n => Utils.htmlToText(n.jpHtml || "").length > 0);
+}
+
+  function selectAllMatchingCurrentFilters(){
+    if (!window.App.State?.flat) return;
+    const ud = Storage.userData;
+    const q = (searchEl?.value || "").trim().toLowerCase();
+    const sMin = Number(scoreMinEl?.value || 0);
+    const sMax = Number(scoreMaxEl?.value || CONST.SCORE_MAX);
+
+    const settings = Storage.settings || {};
+    const srsEnabled = !!settings.srsEnabled;
+    const useSrsDiff = srsEnabled && srsDiffEnabled;
+    const srsDiffBounds = useSrsDiff ? getSrsDifficultyBounds() : null;
+
+    window.App.State.flat.forEach(gp => {
+      const exId = exampleIdOf(gp);
+      const gKey = grammarKeyOf(gp);
+
+      if (!levelFilter.has(gp.level)) return;
+
+      const starred = !!ud.seenExamples[exId];
+      if (starFilter === "starred" && !starred) return;
+
+      if (cramSrsMode === "only"){
+        const srsApi = window.App.SRS;
+        const inSrs = !!(srsApi && srsApi.hasGrammarKey && srsApi.hasGrammarKey(gKey));
+        if (!inSrs) return;
+      }
+
+      if (useSrsDiff){
+        const srsApi = window.App.SRS;
+        if (!(srsApi && srsApi.hasGrammarKey && srsApi.getCard)) return;
+        if (!srsApi.hasGrammarKey(gKey)) return;
+        const card = srsApi.getCard(gKey);
+        const diff = Number(card && card.difficulty);
+        if (!Number.isFinite(diff) || diff <= 0) return;
+        const { dMin, dMax } = srsDiffBounds;
+        if (diff < dMin || diff > dMax) return;
+      }
+
+      const score = getScore(exId);
+      if (score < sMin || score > sMax) return;
+
+      const hay = `${gp.grammar} ${gp.romaji||""} ${gp.meaning||""}`.toLowerCase();
+      if (q && !hay.includes(q)) return;
+
+      // Only select items that can actually generate cards
+      if (!hasExamples(gKey)) return;
+
+      selected.add(exId);
+    });
+
+    refreshSelectedCount();
+    buildList();
+  }
+
+  function setCramSrsMode(nextMode){
+    cramSrsMode = nextMode === "only" ? "only" : "any";
+    if (cramSrsBtns && cramSrsBtns.length){
+      cramSrsBtns.forEach(b=>b.classList.remove("active"));
+      const btn = cramSrsBtns.find(b => (b.dataset.srs||"") === cramSrsMode) || cramSrsBtns[0];
+      btn && btn.classList.add("active");
+    }
+  }
+
+  function normalizeSrsDiffRange(){
+    if (!srsDiffMinEl || !srsDiffMaxEl) return;
+    let aMin = Number(srsDiffMinEl.value || 1);
+    let aMax = Number(srsDiffMaxEl.value || 10);
+    if (!Number.isFinite(aMin)) aMin = 1;
+    if (!Number.isFinite(aMax)) aMax = 10;
+    if (aMin > aMax){
+      const t = aMin; aMin = aMax; aMax = t;
+    }
+    // Clamp
+    aMin = Math.max(1, Math.min(10, aMin));
+    aMax = Math.max(1, Math.min(10, aMax));
+    srsDiffMinEl.value = String(aMin);
+    srsDiffMaxEl.value = String(aMax);
+
+    // Map axis (1=hard .. 10=easy) -> FSRS difficulty (10=hard .. 1=easy)
+    const dHard = 11 - aMin;
+    const dEasy = 11 - aMax;
+
+    const fmt = (n) => {
+      // Always show a fixed-width numeric format like 01.00, 10.00
+      const s = (Number.isFinite(n) ? n : 0).toFixed(2);
+      const parts = s.split(".");
+      const i = (parts[0] || "0").padStart(2, "0");
+      const d = (parts[1] || "00").padEnd(2, "0").slice(0, 2);
+      return `${i}.${d}`;
+    };
+
+    // Keep the display width stable (no "all" vs numbers swapping)
+    const hardTxt = fmt(dHard);
+    const easyTxt = fmt(dEasy);
+
+    if (srsDiffHardValEl) srsDiffHardValEl.textContent = hardTxt;
+    if (srsDiffEasyValEl) srsDiffEasyValEl.textContent = easyTxt;
+
+    if (srsDiffTextEl){
+      if (aMin === 1 && aMax === 10){
+        srsDiffTextEl.textContent = "Difficulty: ALL";
+      } else {
+        srsDiffTextEl.textContent = `Difficulty: ${hardTxt} (hard) → ${easyTxt} (easy)`;
+      }
+    }
+
+    updateSrsDiffTrack();
+  }
+
+
+  function updateSrsDiffTrack(){
+    if (!srsDiffDualEl || !srsDiffMinEl || !srsDiffMaxEl) return;
+    const a1 = Number(srsDiffMinEl.value || 1);
+    const a2 = Number(srsDiffMaxEl.value || 10);
+    const lo = Math.min(a1, a2);
+    const hi = Math.max(a1, a2);
+    const pct = (v) => ((v - 1) / 9) * 100;
+    srsDiffDualEl.style.setProperty("--min", `${pct(lo)}%`);
+    srsDiffDualEl.style.setProperty("--max", `${pct(hi)}%`);
+  }
+
+
+  function getSrsDifficultyBounds(){
+    if (!srsDiffMinEl || !srsDiffMaxEl) return { dMin: 1, dMax: 10 };
+    let aMin = Number(srsDiffMinEl.value || 1);
+    let aMax = Number(srsDiffMaxEl.value || 10);
+    if (!Number.isFinite(aMin)) aMin = 1;
+    if (!Number.isFinite(aMax)) aMax = 10;
+    if (aMin > aMax){ const t=aMin; aMin=aMax; aMax=t; }
+    // Axis -> difficulty bounds
+    const dMax = 11 - aMin; // hard end (higher number)
+    const dMin = 11 - aMax; // easy end (lower number)
+    return { dMin, dMax };
+  }
+
+  function setSrsDifficultyEnabled(on){
+    const enabled = !!on;
+    srsDiffEnabled = enabled;
+    if (srsDiffBtn) srsDiffBtn.classList.toggle("active", enabled);
+    if (srsDiffPanelEl) srsDiffPanelEl.hidden = !enabled;
+    if (enabled){
+      prevSrsModeBeforeDiff = cramSrsMode;
+      setCramSrsMode("only");
+      normalizeSrsDiffRange();
+    } else {
+      // Restore previous SRS filter mode (if any)
+      setCramSrsMode(prevSrsModeBeforeDiff || "any");
+    }
+    buildList();
   }
 
   
@@ -107,8 +342,11 @@
     }
 
     if (!opts.ignoreScore){
-      const sMin = Number(scoreMinEl?.value || 0);
-      const sMax = Number(scoreMaxEl?.value || CONST.SCORE_MAX);
+      const settings = Storage.settings || {};
+    const srsEnabled = !!settings.srsEnabled;
+
+    const sMin = srsEnabled ? 0 : Number(scoreMinEl?.value || 0);
+    const sMax = srsEnabled ? CONST.SCORE_MAX : Number(scoreMaxEl?.value || CONST.SCORE_MAX);
       const score = getScore(exId);
       if (score < sMin || score > sMax) return false;
     }
@@ -371,6 +609,33 @@ function refreshSelectedCount(){
     updateCustomListButtons();
   }
 
+
+  function applySrsUiVisibility(){
+    const settings = Storage.settings || {};
+    const srsEnabled = !!settings.srsEnabled;
+
+    // When SRS scheduling is enabled, self-rating score range is not relevant.
+    if (scoreRangeGroupEl) scoreRangeGroupEl.hidden = srsEnabled;
+    if (srsFilterGroupEl) srsFilterGroupEl.hidden = !srsEnabled;
+
+    if (!srsEnabled){
+      // Reset SRS-only filter if SRS is disabled.
+      cramSrsMode = "any";
+      srsDiffEnabled = false;
+      if (srsDiffBtn) srsDiffBtn.classList.remove("active");
+      if (srsDiffPanelEl) srsDiffPanelEl.hidden = true;
+      if (cramSrsBtns && cramSrsBtns.length){
+        cramSrsBtns.forEach(b=>b.classList.remove("active"));
+        const anyBtn = cramSrsBtns.find(b=> (b.dataset.srs||"") === "any") || cramSrsBtns[0];
+        anyBtn && anyBtn.classList.add("active");
+      }
+    } else {
+      // Ensure score range doesn't accidentally filter when hidden.
+      if (scoreMinEl) scoreMinEl.value = "0";
+      if (scoreMaxEl) scoreMaxEl.value = String(CONST.SCORE_MAX);
+    }
+  }
+
 function buildList(){
     if (!listEl || !window.App.State?.flat) return;
     listEl.innerHTML = "";
@@ -380,6 +645,11 @@ function buildList(){
 
     const sMin = Number(scoreMinEl?.value || 0);
     const sMax = Number(scoreMaxEl?.value || CONST.SCORE_MAX);
+
+    const settings = Storage.settings || {};
+    const srsEnabled = !!settings.srsEnabled;
+    const useSrsDiff = srsEnabled && srsDiffEnabled;
+    const srsDiffBounds = useSrsDiff ? getSrsDifficultyBounds() : null;
 
     let anyShown = false;
 
@@ -392,6 +662,23 @@ function buildList(){
       const starred = !!ud.seenExamples[exId];
       if (starFilter === "starred" && !starred) return;
 
+      if (cramSrsMode === "only"){
+        const srsApi = window.App.SRS;
+        const inSrs = !!(srsApi && srsApi.hasGrammarKey && srsApi.hasGrammarKey(gKey));
+        if (!inSrs) return;
+      }
+
+      if (useSrsDiff){
+        const srsApi = window.App.SRS;
+        if (!(srsApi && srsApi.hasGrammarKey && srsApi.getCard)) return;
+        if (!srsApi.hasGrammarKey(gKey)) return;
+        const card = srsApi.getCard(gKey);
+        const diff = Number(card && card.difficulty);
+        if (!Number.isFinite(diff) || diff <= 0) return;
+        const { dMin, dMax } = srsDiffBounds;
+        if (diff < dMin || diff > dMax) return;
+      }
+
       const score = getScore(exId);
       if (score < sMin || score > sMax) return;
 
@@ -399,6 +686,23 @@ function buildList(){
       if (q && !hay.includes(q)) return;
 
       const canUse = hasExamples(gKey);
+
+      // Match main/viewall: show SRS badge when scheduling enabled; otherwise show personal score emoji.
+      const srsUiEnabled = !!settings.srsEnabled;
+      let srsButtonHtml = "";
+      if (srsUiEnabled){
+        const srsApi = window.App.SRS;
+        const inSrs = !!(srsApi && srsApi.hasGrammarKey && srsApi.hasGrammarKey(gKey));
+        if (inSrs && srsApi && typeof srsApi.getEmojiForKey === "function"){
+          const e = srsApi.getEmojiForKey(gKey);
+          const emoji = (e && e.emoji) ? e.emoji : (window.App.CONST?.SCORE_EMOJIS?.[0] || "🌑");
+          const tip = (e && e.title) ? e.title : "In SRS";
+          srsButtonHtml = `<button class="srs-add-btn srs-added" type="button" title="${Utils.escapeHtml(tip)}">${emoji}</button>`;
+        } else {
+          srsButtonHtml = `<button class="srs-add-btn${inSrs ? " srs-added" : ""}" type="button" title="${inSrs ? "In SRS" : "Add to SRS"}">＋</button>`;
+        }
+      }
+
 
       const item = document.createElement("div");
       item.className =
@@ -408,16 +712,88 @@ function buildList(){
       item.tabIndex = 0;
 
       item.innerHTML = `
-        <div class="cram-item-title">${Utils.escapeHtml(gp.grammar)}</div>
-        <div class="cram-item-meaning">${Utils.escapeHtml(gp.meaning || "")}</div>
+        <div class="cram-item-main">
+          <div class="cram-item-info">
+            <div class="cram-item-title">${Utils.escapeHtml(gp.grammar)}</div>
+            <div class="cram-item-meaning">${Utils.escapeHtml(gp.meaning || "")}</div>
+          </div>
+          <div class="cram-item-controls">
+            ${srsButtonHtml}
+            <span class="star-toggle ${starred ? "seen":""}" title="Mark as seen">★</span>
+          </div>
+        </div>
       `;
+
+      const controlsEl = item.querySelector(".cram-item-controls");
+      const starEl = item.querySelector(".star-toggle");
+
+      // Only show self-rating emoji scores when SRS scheduling is OFF.
+      if (!!settings.scoresEnabled && !srsUiEnabled && window.App.Scores){
+        const scoreWrap = window.App.Scores.build(exId);
+        if (scoreWrap && controlsEl && starEl) controlsEl.insertBefore(scoreWrap, starEl);
+      }
+
+      // Wire up SRS toggle in this list (stopPropagation so it doesn't select/deselect the item).
+      const srsBtn = item.querySelector(".srs-add-btn");
+      if (srsBtn && srsUiEnabled){
+        srsBtn.addEventListener("click",(ev)=>{
+          ev.stopPropagation();
+          const srsApi = window.App.SRS;
+          if (!srsApi) return;
+          const inSrsNow = srsApi.hasGrammarKey && srsApi.hasGrammarKey(gKey);
+          if (!inSrsNow){
+            const added = srsApi.addGrammarKey(gKey);
+            if (added){
+              srsBtn.classList.add("srs-added");
+              if (srsApi.getEmojiForKey){
+                const e = srsApi.getEmojiForKey(gKey);
+                if (e && e.emoji) srsBtn.textContent = e.emoji;
+                if (e && e.title) srsBtn.title = e.title;
+                else srsBtn.title = "In SRS";
+              } else {
+                srsBtn.title = "In SRS";
+              }
+              // Keep list filters honest (SRS-only mode etc)
+              const st = listEl ? listEl.scrollTop : 0;
+              buildList();
+              if (listEl) listEl.scrollTop = st;
+            }
+          } else {
+            srsApi.beginToggle && srsApi.beginToggle(gKey, srsBtn);
+            // beginToggle may remove; refresh after a tick
+            setTimeout(()=>{
+              const st = listEl ? listEl.scrollTop : 0;
+              buildList();
+              if (listEl) listEl.scrollTop = st;
+            }, 10);
+          }
+        });
+      }
+
+      // Star toggle (matches main/viewall)
+      if (starEl){
+        starEl.addEventListener("click",(ev)=>{
+          ev.stopPropagation();
+          const cur = !!Storage.userData.seenExamples[exId];
+          if (cur) delete Storage.userData.seenExamples[exId];
+          else Storage.userData.seenExamples[exId] = true;
+          Storage.saveUserData();
+          starEl.classList.toggle("seen", !cur);
+          const st = listEl ? listEl.scrollTop : 0;
+          buildList();
+          if (listEl) listEl.scrollTop = st;
+        });
+      }
+
 
       item.addEventListener("click", () => {
         if (!canUse) return;
         if (selected.has(exId)) selected.delete(exId);
         else selected.add(exId);
         refreshSelectedCount();
+        const st = listEl ? listEl.scrollTop : 0;
         buildList();
+        if (listEl) listEl.scrollTop = st;
       });
 
       listEl.appendChild(item);
@@ -439,6 +815,7 @@ function buildList(){
 
     isOpen = true;
     modalEl.hidden = false;
+    applySrsUiVisibility();
     refreshCustomListDropdown(true);
     refreshSelectedCount();
     buildList();
@@ -449,6 +826,8 @@ function buildList(){
     if (!modalEl) return;
     isOpen = false;
     modalEl.hidden = true;
+    const ymd = document.querySelector("#viewDate")?.value || Utils.dateToYMD(new Date());
+    window.App.Daily?.render?.(ymd);
   }
 
   function showResumePrompt(on){
@@ -478,7 +857,14 @@ function buildList(){
     }
   }
 
-  function hasSavedSession(){
+  
+  function setTopCollapsed(on){
+    topCollapsed = !!on;
+    if (modalEl) modalEl.classList.toggle("cram-top-collapsed", topCollapsed);
+    if (collapseBtnEl) collapseBtnEl.textContent = topCollapsed ? "▾" : "▴";
+  }
+
+function hasSavedSession(){
     return !!loadSavedSession();
   }
 
@@ -529,11 +915,18 @@ function buildList(){
     if (!s) return false;
     if (!window.App.State?.flat) return false;
 
+    // Build a quick lookup so we don't linearly scan the full grammar list for every card.
+    const byExId = new Map();
+    window.App.State.flat.forEach(x=>{
+      const id = `${x.level}_${x.index}`;
+      if (!byExId.has(id)) byExId.set(id, x);
+    });
+
     // Rebuild deck with fresh gp references
     const rebuilt = [];
     (s.deck || []).forEach(it => {
       const exId = String(it?.exId || "");
-      const gp = window.App.State.flat.find(x => `${x.level}_${x.index}` === exId);
+      const gp = byExId.get(exId);
       if (!gp) return;
       rebuilt.push({ exId, gp, jpHtml: String(it?.jpHtml || ""), enHtml: String(it?.enHtml || "") });
     });
@@ -553,7 +946,7 @@ function buildList(){
     const wg = Array.isArray(s.wrongGrammar) ? s.wrongGrammar : [];
     wg.forEach(w => {
       const exId = String(w?.exId || "");
-      const gp = window.App.State.flat.find(x => `${x.level}_${x.index}` === exId);
+      const gp = byExId.get(exId);
       if (!gp) return;
       const key = String(w?.key || grammarKeyOf(gp));
       wrongGrammarMap.set(key, { gp, exId, count: Math.max(1, Number(w?.count || 1)) });
@@ -562,6 +955,8 @@ function buildList(){
     wrongExampleIds = new Set((s.wrongExampleIds || []).map(String));
 
     hasManualSave = true;
+
+    undoState = null;
     // Close selection modal if it was open and jump straight into the session
     close();
     showSession(true);
@@ -573,6 +968,7 @@ function buildList(){
   function endSession(){
     clearSavedSession();
     hasManualSave = false;
+    undoState = null;
     deck = [];
     wrongCount = 0;
     rightCount = 0;
@@ -588,13 +984,15 @@ function buildList(){
 
 
   function quitSession(){
-    // If the user has manually saved (or resumed a saved session),
-    // just close the cram overlay and keep the saved snapshot.
-    if (hasManualSave){
+    // Expected behavior: quitting should keep progress.
+    // - If a session is in progress, save a resumable snapshot and close the overlay.
+    // - If the session is already finished (results screen), clear the snapshot.
+    if (deck && deck.length){
+      saveSessionSnapshot();
+      hasManualSave = true;
       showSession(false);
       setSaveButtonState();
     } else {
-      // No saved snapshot: behave like a full quit
       endSession();
     }
   }
@@ -632,6 +1030,7 @@ function buildList(){
     clearSavedSession();
 
     hasManualSave = false;
+    undoState = null;
     sessionExampleIds = Array.from(new Set(ids));
 
     wrongCount = 0;
@@ -965,7 +1364,120 @@ cardEl.innerHTML = `
     if (scoreEl) scoreEl.textContent = `Wrong ${wrongCount} • Right ${rightCount}`;
   }
 
+
+  function setCompletionUI(isComplete){
+    const done = !!isComplete;
+
+    // Hide the top-right quit button on completion, and show a centered quit below the card.
+    if (quitBtn) quitBtn.hidden = done;
+    if (completeQuitRowEl) completeQuitRowEl.hidden = !done;
+
+    // Hide the action row buttons on completion (the card itself becomes the focus).
+    if (wrongBtn) wrongBtn.hidden = done;
+    if (rightBtn) rightBtn.hidden = done;
+    if (nextBtn) nextBtn.hidden = true;
+  }
+
+
+
+  function cloneDeckCardForUndo(c){
+    if (!c) return null;
+    const out = {
+      exId: c.exId,
+      gp: c.gp,
+      jpHtml: c.jpHtml,
+      enHtml: c.enHtml,
+      _exampleIndex: c._exampleIndex
+    };
+    if (c._example){
+      out._example = { jpHtml: c._example.jpHtml || "", enHtml: c._example.enHtml || "" };
+    }
+    return out;
+  }
+
+  function serializeWrongGrammarMap(){
+    const arr = [];
+    try{
+      wrongGrammarMap.forEach((v, k) => {
+        arr.push({ key: String(k), exId: String(v?.exId || ""), count: Number(v?.count || 1) });
+      });
+    }catch(e){ /* ignore */ }
+    return arr;
+  }
+
+  function restoreWrongGrammarMap(serialized){
+    const flat = window.App.State?.flat || [];
+    const map = new Map();
+    (serialized || []).forEach(w => {
+      const exId = String(w?.exId || "");
+      const gp = flat.find(x => `${x.level}_${x.index}` === exId);
+      if (!gp) return;
+      const key = String(w?.key || grammarKeyOf(gp));
+      map.set(key, { gp, exId, count: Math.max(1, Number(w?.count || 1)) });
+    });
+    return map;
+  }
+
+  function snapshotForUndo(){
+    return {
+      deck: (deck || []).map(cloneDeckCardForUndo),
+      wrongCount,
+      rightCount,
+      totalInitial,
+      showingBack,
+      awaitingNext,
+      wrongGrammar: serializeWrongGrammarMap(),
+      wrongExampleIds: Array.from(wrongExampleIds || []).map(String)
+    };
+  }
+
+  function canUndo(){
+    return !!undoState;
+  }
+
+  function setUndoEnabled(){
+    if (!undoBtn) return;
+    const enabled = canUndo();
+    undoBtn.disabled = !enabled;
+  }
+
+  function pushUndoSnapshot(){
+    undoState = snapshotForUndo();
+    setUndoEnabled();
+  }
+
+  function undoLast(){
+    if (!undoState) return;
+    const s = undoState;
+    undoState = null;
+
+    deck = (s.deck || []).map(c => {
+      const out = {
+        exId: c.exId,
+        gp: c.gp,
+        jpHtml: c.jpHtml,
+        enHtml: c.enHtml
+      };
+      if (c._exampleIndex != null) out._exampleIndex = c._exampleIndex;
+      if (c._example) out._example = { jpHtml: c._example.jpHtml || "", enHtml: c._example.enHtml || "" };
+      return out;
+    });
+
+    wrongCount = Number(s.wrongCount || 0);
+    rightCount = Number(s.rightCount || 0);
+    totalInitial = Number(s.totalInitial || 0);
+    showingBack = !!s.showingBack;
+    awaitingNext = !!s.awaitingNext;
+
+    wrongGrammarMap = restoreWrongGrammarMap(s.wrongGrammar);
+    wrongExampleIds = new Set((s.wrongExampleIds || []).map(String));
+
+    renderCard();
+    setUndoEnabled();
+  }
+
   function syncActionButtons(){
+    setUndoEnabled();
     if (!wrongBtn || !rightBtn || !nextBtn) return;
 
     const done = deck.length === 0;
@@ -999,11 +1511,41 @@ cardEl.innerHTML = `
       nextBtn.disabled = true;
     }
   }
+function stepBackExampleCram(card, dir){
+  if (!card || !card.gp) return;
+  const gKey = grammarKeyOf(card.gp);
+  const usable = getUsableNotes(gKey);
+  if (usable.length < 2) return;
+
+  const base = card._example
+    ? card._example
+    : { jpHtml: card.jpHtml || "", enHtml: card.enHtml || "" };
+
+  const baseSig = `${base.jpHtml || ""}||${base.enHtml || ""}`;
+
+  let idx = Number.isFinite(card._exampleIndex) ? card._exampleIndex : -1;
+  if (idx < 0){
+    idx = usable.findIndex(n => `${n.jpHtml || ""}||${n.enHtml || ""}` === baseSig);
+  }
+  if (idx < 0) idx = 0;
+
+  idx = idx + (Number(dir) || 0);
+  idx = idx % usable.length;
+  if (idx < 0) idx += usable.length;
+
+  const pick = usable[idx];
+  card._exampleIndex = idx;
+  card._example = { jpHtml: pick.jpHtml || "", enHtml: pick.enHtml || "" };
+
+  renderCard();
+}
+
 
   function renderCard(){
     if (!cardEl) return;
 
     if (deck.length === 0){
+      setCompletionUI(true);
       // Session completed: do not leave a resumable save behind.
       clearSavedSession();
       hasManualSave = false;
@@ -1016,30 +1558,93 @@ cardEl.innerHTML = `
       return;
     }
 
+    setCompletionUI(false);
+
     const c = deck[0];
-    const gp = c.gp;
+const gp = c.gp;
 
-    const gpHtml = gp.primaryLink
-      ? `<a href="${gp.primaryLink}" target="_blank" rel="noopener">${Utils.escapeHtml(gp.grammar)}</a>`
-      : Utils.escapeHtml(gp.grammar);
+const gpHtml = gp.primaryLink
+  ? `<a href="${gp.primaryLink}" target="_blank" rel="noopener">${Utils.escapeHtml(gp.grammar)}</a>`
+  : Utils.escapeHtml(gp.grammar);
 
-    if (!showingBack){
-      cardEl.innerHTML = `<div class="cram-front">${c.jpHtml}</div>`;
-    } else {
-      cardEl.innerHTML = `
-        <div class="cram-back">
-          <div class="jp">${c.jpHtml}</div>
-          <div class="en">${c.enHtml || ""}</div>
-          <div class="gp level-${gp.level}">${gpHtml}</div>
-          <div class="desc">${Utils.escapeHtml(gp.meaning || "")}</div>
-        </div>
-      `;
-    }
+const gKey = grammarKeyOf(gp);
+const usable = showingBack ? getUsableNotes(gKey) : [];
+const usableCount = showingBack ? usable.length : 0;
+
+let backJp = c.jpHtml;
+let backEn = c.enHtml || "";
+
+if (showingBack && usableCount){
+  const base = c._example ? c._example : { jpHtml: c.jpHtml || "", enHtml: c.enHtml || "" };
+  const baseSig = `${base.jpHtml || ""}||${base.enHtml || ""}`;
+
+  let idx = Number.isFinite(c._exampleIndex) ? c._exampleIndex : -1;
+  if (idx < 0){
+    idx = usable.findIndex(n => `${n.jpHtml || ""}||${n.enHtml || ""}` === baseSig);
+  }
+  if (idx < 0) idx = 0;
+
+  c._exampleIndex = idx;
+  const pick = usable[idx];
+  c._example = { jpHtml: pick.jpHtml || "", enHtml: pick.enHtml || "" };
+
+  backJp = c._example.jpHtml || backJp;
+  backEn = c._example.enHtml || backEn;
+}
+
+const navCountText = (showingBack && usableCount > 1)
+  ? `${(Number.isFinite(c._exampleIndex) ? c._exampleIndex : 0) + 1}/${usableCount}`
+  : "";
+
+const navHtml = (showingBack && usableCount > 1) ? `
+  <div class="card-ex-nav">
+    <span class="card-ex-count">${navCountText}</span>
+    <button type="button" class="card-ex-btn" data-ex-nav="prev" aria-label="Previous example">&lt;</button>
+    <button type="button" class="card-ex-btn" data-ex-nav="next" aria-label="Next example">&gt;</button>
+  </div>
+` : "";
+
+if (!showingBack){
+  cardEl.innerHTML = `<div class="cram-front">${c.jpHtml}</div>`;
+} else {
+  cardEl.innerHTML = `
+    <div class="cram-back">
+      <div class="jp">${backJp}</div>
+      <div class="en">${backEn || ""}</div>
+      <div class="gp level-${gp.level}">${gpHtml}</div>
+      <div class="desc">${Utils.escapeHtml(gp.meaning || "")}</div>
+      ${navHtml}
+    </div>
+  `;
+}
+
+    attachCardFontControls(cardEl);
 
     cardEl.onclick = () => {
-      showingBack = !showingBack;
-      renderCard();
+  if (!showingBack){
+    showingBack = true;
+    renderCard();
+  }
+};
+
+if (showingBack && usableCount > 1){
+  const prevBtn = cardEl.querySelector('[data-ex-nav="prev"]');
+  const nextBtn = cardEl.querySelector('[data-ex-nav="next"]');
+  if (prevBtn){
+    prevBtn.onclick = (ev) => {
+      ev.preventDefault();
+      ev.stopPropagation();
+      stepBackExampleCram(deck[0], -1);
     };
+  }
+  if (nextBtn){
+    nextBtn.onclick = (ev) => {
+      ev.preventDefault();
+      ev.stopPropagation();
+      stepBackExampleCram(deck[0], +1);
+    };
+  }
+}
 
     if (flipHintEl){ flipHintEl.hidden = false; flipHintEl.textContent = "Click the card to flip."; }
 
@@ -1051,6 +1656,7 @@ cardEl.innerHTML = `
   function beginSession(){
     clearSavedSession();
     hasManualSave = false;
+    undoState = null;
     wrongCount = 0;
     rightCount = 0;
     showingBack = false;
@@ -1069,6 +1675,8 @@ cardEl.innerHTML = `
   function markWrong(){
     if (deck.length === 0) return;
     if (awaitingNext) return;
+
+    pushUndoSnapshot();
 
     // Step 1: reveal the back, then wait for NEXT to advance/reinsert.
     wrongCount++;
@@ -1095,6 +1703,8 @@ cardEl.innerHTML = `
   function markRight(){
     if (deck.length === 0) return;
     if (awaitingNext) return;
+
+    pushUndoSnapshot();
     rightCount++;
     deck.shift();
     showingBack = false;
@@ -1102,13 +1712,14 @@ cardEl.innerHTML = `
   }
 
 
-  Cram.refreshIfOpen = () => { if (isOpen) buildList(); };
+  Cram.refreshIfOpen = () => { if (isOpen){ applySrsUiVisibility(); buildList(); } };
 
   Cram.init = () => {
     const openBtn = Utils.qs("#openCramBtn");
     modalEl = Utils.qs("#cramModalBackdrop");
     listEl = Utils.qs("#cramList");
     searchEl = Utils.qs("#cramSearch");
+    collapseBtnEl = Utils.qs("#cramCollapseBtn");
     startBtn = Utils.qs("#cramStartBtn");
     selectedCountEl = Utils.qs("#cramSelectedCount");
     totalCardsEl = Utils.qs("#cramTotalCards");
@@ -1118,9 +1729,24 @@ cardEl.innerHTML = `
     levelFiltersEl = Utils.qs("#cramLevelFilters");
     selectTodayBtn = Utils.qs("#cramSelectTodayBtn");
     deselectAllBtn = Utils.qs("#cramDeselectAllBtn");
+    scoreRangeGroupEl = Utils.qs("#cramScoreRangeGroup");
+    srsFilterGroupEl = Utils.qs("#cramSrsFilterGroup");
+
     scoreMinEl = Utils.qs("#cramScoreMin");
     scoreMaxEl = Utils.qs("#cramScoreMax");
     itemsPerGrammarEl = Utils.qs("#cramItemsPerGrammar");
+
+    // SRS difficulty filter controls
+    srsDiffBtn = Utils.qs("#cramSrsDifficultyBtn");
+    srsDiffPanelEl = Utils.qs("#cramSrsDifficultyPanel");
+    srsDiffMinEl = Utils.qs("#cramSrsDifficultyMin");
+    srsDiffMaxEl = Utils.qs("#cramSrsDifficultyMax");
+    srsDiffTextEl = Utils.qs("#cramSrsDifficultyText");
+    srsDiffHardValEl = Utils.qs("#cramSrsDifficultyHardVal");
+    srsDiffEasyValEl = Utils.qs("#cramSrsDifficultyEasyVal");
+    srsDiffDualEl = Utils.qs("#cramSrsDifficultyDual");
+    srsDiffSelectBtn = Utils.qs("#cramSrsDifficultySelectBtn");
+    srsDiffResetBtn = Utils.qs("#cramSrsDifficultyResetBtn");
 
 
     customListSelectEl = Utils.qs("#cramCustomListSelect");
@@ -1138,6 +1764,10 @@ cardEl.innerHTML = `
     wrongBtn = Utils.qs("#cramWrongBtn");
     rightBtn = Utils.qs("#cramRightBtn");
     nextBtn = Utils.qs("#cramNextBtn");
+
+    completeQuitRowEl = Utils.qs("#cramCompleteQuitRow");
+    completeQuitBtnEl = Utils.qs("#cramCompleteQuitBtn");
+    undoBtn = Utils.qs("#cramUndoBtn");
     progressEl = Utils.qs("#cramProgressText");
     scoreEl = Utils.qs("#cramScoreText");
     flipHintEl = Utils.qs("#cramFlipHint");
@@ -1148,7 +1778,10 @@ cardEl.innerHTML = `
     resumeStartNewBtn = Utils.qs("#cramDiscardBtn");
     resumeCloseBtn = Utils.qs("#cramResumeCloseBtn");
 
-    starBtns = Array.from(document.querySelectorAll(".cram-star-btn"));
+    // Only "Stars" filter buttons (avoid mixing with SRS buttons)
+    starBtns = Array.from((modalEl || document).querySelectorAll(".cram-star-btn[data-star]"));
+
+    cramSrsBtns = Array.from((modalEl || document).querySelectorAll("#cramSrsFilterGroup [data-srs]"));
 
     showSession(false);
     if (nextBtn){ nextBtn.hidden = true; nextBtn.disabled = true; }
@@ -1177,6 +1810,10 @@ cardEl.innerHTML = `
       }
     });
     closeBtn?.addEventListener("click", close);
+    collapseBtnEl?.addEventListener("click",(ev)=>{ ev.stopPropagation(); setTopCollapsed(!topCollapsed); });
+    // Ensure correct initial arrow state
+    setTopCollapsed(topCollapsed);
+
     modalEl?.addEventListener("click", (e)=>{ if (e.target === modalEl) close(); });
 
 
@@ -1199,29 +1836,32 @@ cardEl.innerHTML = `
       if (e.target === resumeBackdropEl) showResumePrompt(false);
     });
 
-    // Score range
-    scoreMinEl.innerHTML = "";
-    scoreMaxEl.innerHTML = "";
-    for (let i=0;i<=CONST.SCORE_MAX;i++){
-      const o1 = document.createElement("option");
-      const em = (CONST.SCORE_EMOJIS && CONST.SCORE_EMOJIS[i]) ? CONST.SCORE_EMOJIS[i] : "";
-      o1.value = String(i);
-      o1.textContent = em ? `${em} ${i}` : String(i);
-      const o2 = o1.cloneNode(true);
-      scoreMinEl.appendChild(o1);
-      scoreMaxEl.appendChild(o2);
+    // Score range (removed from UI; keep defaults so nothing filters)
+    if (scoreMinEl && scoreMaxEl){
+      scoreMinEl.innerHTML = "";
+      scoreMaxEl.innerHTML = "";
+      for (let i=0;i<=CONST.SCORE_MAX;i++){
+        const o1 = document.createElement("option");
+        const em = (CONST.SCORE_EMOJIS && CONST.SCORE_EMOJIS[i]) ? CONST.SCORE_EMOJIS[i] : "";
+        o1.value = String(i);
+        o1.textContent = em ? `${em} ${i}` : String(i);
+        const o2 = o1.cloneNode(true);
+        scoreMinEl.appendChild(o1);
+        scoreMaxEl.appendChild(o2);
+      }
+      scoreMinEl.value = "0";
+      scoreMaxEl.value = String(CONST.SCORE_MAX);
+  
+      scoreMinEl.addEventListener("change", ()=>{
+        if (Number(scoreMinEl.value) > Number(scoreMaxEl.value)) scoreMaxEl.value = scoreMinEl.value;
+        buildList();
+      });
+      scoreMaxEl.addEventListener("change", ()=>{
+        if (Number(scoreMaxEl.value) < Number(scoreMinEl.value)) scoreMinEl.value = scoreMaxEl.value;
+        buildList();
+      });
+  
     }
-    scoreMinEl.value = "0";
-    scoreMaxEl.value = String(CONST.SCORE_MAX);
-
-    scoreMinEl.addEventListener("change", ()=>{
-      if (Number(scoreMinEl.value) > Number(scoreMaxEl.value)) scoreMaxEl.value = scoreMinEl.value;
-      buildList();
-    });
-    scoreMaxEl.addEventListener("change", ()=>{
-      if (Number(scoreMaxEl.value) < Number(scoreMinEl.value)) scoreMinEl.value = scoreMaxEl.value;
-      buildList();
-    });
 
     searchEl?.addEventListener("input", Utils.debounce(buildList, 80));
     selectTodayBtn?.addEventListener("click", selectTodaysGrammar);
@@ -1318,6 +1958,47 @@ cardEl.innerHTML = `
       });
     }
 
+    // SRS filter (Any / In SRS)
+    cramSrsBtns.forEach(btn=>{
+      btn.addEventListener("click", ()=>{
+        cramSrsBtns.forEach(b=>b.classList.remove("active"));
+        btn.classList.add("active");
+        cramSrsMode = btn.dataset.srs || "any";
+        // If user switches to "Any", turn off difficulty-based selection.
+        if (cramSrsMode !== "only" && srsDiffEnabled){
+          setSrsDifficultyEnabled(false);
+          return;
+        }
+        buildList();
+      });
+    });
+
+    // SRS difficulty range toggle
+    srsDiffBtn?.addEventListener("click", ()=>{
+      setSrsDifficultyEnabled(!srsDiffEnabled);
+    });
+
+    function onSrsDiffInput(){
+      normalizeSrsDiffRange();
+      if (srsDiffEnabled) buildList();
+    }
+    srsDiffMinEl?.addEventListener("input", onSrsDiffInput);
+    srsDiffMaxEl?.addEventListener("input", onSrsDiffInput);
+    srsDiffResetBtn?.addEventListener("click", ()=>{
+      if (srsDiffMinEl) srsDiffMinEl.value = "1";
+      if (srsDiffMaxEl) srsDiffMaxEl.value = "10";
+      normalizeSrsDiffRange();
+      if (srsDiffEnabled) buildList();
+    });
+
+    srsDiffSelectBtn?.addEventListener("click", ()=>{
+      // Select all items that match the current filters (including difficulty),
+      // without clearing any existing selection.
+      if (!srsDiffEnabled) return;
+      normalizeSrsDiffRange();
+      selectAllMatchingCurrentFilters();
+    });
+
     saveBtn?.addEventListener("click", () => {
       // Manual save: creates a resumable session for later.
       saveSessionSnapshot();
@@ -1337,9 +2018,13 @@ cardEl.innerHTML = `
 
     quitBtn?.addEventListener("click", quitSession);
 
+    completeQuitBtnEl?.addEventListener("click", quitSession);
+
     wrongBtn?.addEventListener("click", markWrong);
     rightBtn?.addEventListener("click", markRight);
     nextBtn?.addEventListener("click", nextAfterWrong);
+
+    undoBtn?.addEventListener("click", undoLast);
 
     refreshSelectedCount();
   };

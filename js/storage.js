@@ -29,7 +29,9 @@
     hideEnglishDefault: false,
     scoresEnabled: true,
     progressiveEnabled: false,
-    progressiveStartByLevel: {} // level -> "YYYY-MM-DD"
+    progressiveStartByLevel: {}, // level -> "YYYY-MM-DD"
+    srsEnabled: false,
+    cardFontScale: 1
   };
 
   // User data
@@ -68,11 +70,54 @@
       else ud.scoresByExample[k] = Math.max(0, Math.min(CONST.SCORE_MAX, n));
     });
 
+
+    // SRS deck + history (user data)
+    if (!ud.srs || typeof ud.srs !== "object") ud.srs = {};
+    const srs = ud.srs;
+    if (!srs.cardsByKey || typeof srs.cardsByKey !== "object") srs.cardsByKey = {};
+    if (!srs.fsrsSettings || typeof srs.fsrsSettings !== "object") srs.fsrsSettings = {};
+    const gArr = Array.isArray(srs.grammarKeys) ? srs.grammarKeys.map(String) : [];
+    const gSeen = new Set();
+    srs.grammarKeys = gArr.filter(k=>{
+      if (!k) return false;
+      if (gSeen.has(k)) return false;
+      gSeen.add(k);
+      return true;
+    });
+    if (srs.mode !== "grammar" && srs.mode !== "sentences") srs.mode = "grammar";
+    const eg = Number(srs.examplesPerGrammar || 3);
+    srs.examplesPerGrammar = Number.isFinite(eg) ? Math.max(1, Math.min(10, eg)) : 3;
+    srs.examplesPerGrammarAll = !!srs.examplesPerGrammarAll;
+
+    // Normalise card records (keep unknown fields as-is)
+    if (srs.cardsByKey && typeof srs.cardsByKey === "object"){
+      Object.keys(srs.cardsByKey).forEach(k=>{
+        const c = srs.cardsByKey[k];
+        if (!c || typeof c !== "object") { delete srs.cardsByKey[k]; return; }
+        if (typeof c.known !== "boolean") c.known = false;
+        if (typeof c.performance !== "number" || !Number.isFinite(c.performance)) c.performance = 0;
+        // dueMinutes/lastMinutes are optional; keep if valid
+        if (c.dueMinutes !== null && c.dueMinutes !== undefined){
+          const dm = Number(c.dueMinutes);
+          c.dueMinutes = Number.isFinite(dm) ? dm : 0;
+        }
+        if (c.lastMinutes !== null && c.lastMinutes !== undefined){
+          const lm = Number(c.lastMinutes);
+          c.lastMinutes = Number.isFinite(lm) ? lm : null;
+        }
+      });
+    }
+
     if (typeof Storage.settings.hideEnglishDefault !== "boolean") Storage.settings.hideEnglishDefault = false;
     if (typeof Storage.settings.scoresEnabled !== "boolean") Storage.settings.scoresEnabled = true;
     if (typeof Storage.settings.progressiveEnabled !== "boolean") Storage.settings.progressiveEnabled = false;
     if (!Storage.settings.progressiveStartByLevel || typeof Storage.settings.progressiveStartByLevel !== "object"){
       Storage.settings.progressiveStartByLevel = {};
+    }
+
+    if (typeof Storage.settings.srsEnabled !== "boolean") Storage.settings.srsEnabled = false;
+    if (typeof Storage.settings.cardFontScale !== "number" || !Number.isFinite(Storage.settings.cardFontScale)){
+      Storage.settings.cardFontScale = 1;
     }
 
     // Cram custom lists (UI)
@@ -103,6 +148,7 @@
     seenExamples: Storage.userData.seenExamples,
     notesByGrammar: Storage.userData.notesByGrammar,
     scoresByExample: Storage.userData.scoresByExample,
+    srs: Storage.userData.srs,
     settings: Storage.settings,
     ui: Storage.ui
   });
@@ -111,10 +157,11 @@
     if (!parsed || typeof parsed !== "object") return;
 
     // Allow both shapes
-    if (parsed.seenExamples || parsed.notesByGrammar || parsed.scoresByExample){
+    if (parsed.seenExamples || parsed.notesByGrammar || parsed.scoresByExample || parsed.srs){
       Storage.userData.seenExamples = parsed.seenExamples || {};
       Storage.userData.notesByGrammar = parsed.notesByGrammar || {};
       Storage.userData.scoresByExample = parsed.scoresByExample || {};
+      if (parsed.srs) Storage.userData.srs = parsed.srs;
     } else if (parsed.userData){
       Storage.userData = parsed.userData;
     }
@@ -144,7 +191,8 @@
       scoresByExample: null,
       settings: null,
       ui: null,
-      heatmap: null
+      heatmap: null,
+      srs: null
     };
     if (!parsed || typeof parsed !== "object") return out;
 
@@ -154,10 +202,12 @@
     const seen = srcUser.seenExamples || srcUser.stars || parsed.seenExamples || parsed.stars;
     const notes = srcUser.notesByGrammar || parsed.notesByGrammar;
     const scores = srcUser.scoresByExample || parsed.scoresByExample;
+    const srs = srcUser.srs || parsed.srs;
 
     if (seen && typeof seen === "object") out.seenExamples = seen;
     if (notes && typeof notes === "object") out.notesByGrammar = notes;
     if (scores && typeof scores === "object") out.scoresByExample = scores;
+    if (srs && typeof srs === "object") out.srs = srs;
 
     const settings = parsed.settings || srcUser.settings;
     if (settings && typeof settings === "object") out.settings = settings;
@@ -182,12 +232,59 @@
       hasSeen: isObj(n.seenExamples),
       hasNotes: isObj(n.notesByGrammar),
       hasScores: isObj(n.scoresByExample),
+      hasSrs: isObj(n.srs),
       hasSettings: isObj(n.settings),
       hasUi: isObj(n.ui) && (isObj(n.ui.filters) || isObj(n.ui.expanded)),
       hasCramLists: isObj(n.ui) && isObj(n.ui.cramLists),
       hasHeatmap: isObj(n.heatmap)
     };
   };
+
+  function normalizeSrsShape(srsIn){
+    const s = (srsIn && typeof srsIn === "object") ? JSON.parse(JSON.stringify(srsIn)) : {};
+    if (!s.cardsByKey || typeof s.cardsByKey !== "object") s.cardsByKey = {};
+    if (!Array.isArray(s.grammarKeys)) s.grammarKeys = [];
+    s.grammarKeys = s.grammarKeys.map(String);
+    // de-dupe
+    const seen = new Set();
+    s.grammarKeys = s.grammarKeys.filter(k=>{
+      if (!k) return false;
+      if (seen.has(k)) return false;
+      seen.add(k);
+      return true;
+    });
+    if (s.mode !== "grammar" && s.mode !== "sentences") s.mode = "grammar";
+    const eg = Number(s.examplesPerGrammar || 3);
+    s.examplesPerGrammar = Number.isFinite(eg) ? Math.max(1, Math.min(10, eg)) : 3;
+    s.examplesPerGrammarAll = !!s.examplesPerGrammarAll;
+    if (!s.fsrsSettings || typeof s.fsrsSettings !== "object") s.fsrsSettings = {};
+    return s;
+  }
+
+  function mergeSrs(existing, incoming){
+    const cur = normalizeSrsShape(existing);
+    const inc = normalizeSrsShape(incoming);
+
+    // Keys: union
+    const set = new Set(cur.grammarKeys || []);
+    (inc.grammarKeys || []).forEach(k=>{ if (k && !set.has(k)) set.add(k); });
+    cur.grammarKeys = Array.from(set);
+
+    // Cards: add missing only
+    cur.cardsByKey = cur.cardsByKey && typeof cur.cardsByKey === "object" ? cur.cardsByKey : {};
+    const incCards = inc.cardsByKey && typeof inc.cardsByKey === "object" ? inc.cardsByKey : {};
+    Object.keys(incCards).forEach(k=>{
+      if (cur.cardsByKey[k] === undefined) cur.cardsByKey[k] = incCards[k];
+    });
+
+    // FSRS settings: apply incoming values (global tuning)
+    cur.fsrsSettings = cur.fsrsSettings && typeof cur.fsrsSettings === "object" ? cur.fsrsSettings : {};
+    if (inc.fsrsSettings && typeof inc.fsrsSettings === "object"){
+      cur.fsrsSettings = { ...cur.fsrsSettings, ...inc.fsrsSettings };
+    }
+
+    return cur;
+  }
 
   function mergeObjectAddMissing(target, incoming){
     if (!incoming || typeof incoming !== "object") return;
@@ -280,6 +377,12 @@
     if (include.scores && n.scoresByExample){
       if (mode === "overwrite") Storage.userData.scoresByExample = n.scoresByExample;
       else mergeScores(Storage.userData.scoresByExample, n.scoresByExample);
+    }
+
+    // SRS
+    if (include.srs && n.srs){
+      if (mode === "overwrite") Storage.userData.srs = normalizeSrsShape(n.srs);
+      else Storage.userData.srs = mergeSrs(Storage.userData.srs, n.srs);
     }
 
     // Settings
