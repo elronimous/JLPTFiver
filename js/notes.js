@@ -183,7 +183,7 @@
     let out = "";
     for (let i=0;i<parts.length;i++){
       const seg = Utils.escapeHtml(parts[i]);
-      if (i % 2 === 1) out += `<span class="jlptfiver-hl" data-jlptfiver-hl="1" style="color:${color};font-weight:800">${seg}</span>`;
+      if (i % 2 === 1) out += `<span class="jlptfiver-hl" data-jlptfiver-hl="1" style="color:${color};font-weight:600">${seg}</span>`;
       else out += seg;
     }
     return out;
@@ -207,12 +207,12 @@
 
     editor.focus();
     try{
-      // Keep your styling consistent with importer: colour + font-weight:800
+      // Keep your styling consistent with importer: colour + moderate weight
       const span = document.createElement("span");
       span.classList.add("jlptfiver-hl");
       span.setAttribute("data-jlptfiver-hl","1");
       span.style.color = color;
-      span.style.fontWeight = "800";
+      span.style.fontWeight = "600";
       range.surroundContents(span);
       sel.removeAllRanges();
       sel.addRange(range);

@@ -362,107 +362,163 @@
 
       <div class="modal-body">
         <div class="cram-controls">
-          <div class="cram-filter-row">
-            <div class="cram-filter-group">
-              <div class="viewall-filter-label">Levels</div>
+          <div class="cram-flow">
+
+            <div class="cram-flow-section">
+              <div class="cram-flow-title">Quick pick</div>
+              <div class="modal-hint" style="margin:.1rem 0 0 0">Choose levels, then grab everything in them.</div>
               <div id="cramLevelFilters" class="cram-level-filters"></div>
-            </div>
 
-            <div class="cram-filter-group">
-              <div class="viewall-filter-label">Stars</div>
-              <div class="cram-stars">
-                <button class="cram-star-btn active" data-star="any">Any</button>
-                <button class="cram-star-btn" data-star="starred">Starred</button>
-              </div>
-            </div>
+              
+<div class="cram-flow-bar">
+  <div id="cramQuickPickPreview" class="cram-pick-preview" title="Grammar">
 
-            <div class="cram-filter-group" id="cramSrsFilterGroup" hidden>
-              <div class="viewall-filter-label">SRS</div>
-              <div class="cram-stars">
-                <button class="cram-star-btn active" data-srs="any">Any</button>
-                <button class="cram-star-btn" data-srs="only">In SRS</button>
-                <button id="cramSrsDifficultyBtn" class="cram-star-btn" type="button">Difficulty</button>
-              </div>
+    <span class="cram-pick-label">Grammar:</span>
+    <span class="cram-emph-num">0</span>
+    <span class="cram-pick-label">JLPT Breakdown:</span>
+    <span class="cram-pick-breakdown">
+      <span class="cram-level-count N5">0</span><span class="cram-level-sep">,</span> 
+      <span class="cram-level-count N4">0</span><span class="cram-level-sep">,</span> 
+      <span class="cram-level-count N3">0</span><span class="cram-level-sep">,</span> 
+      <span class="cram-level-count N2">0</span><span class="cram-level-sep">,</span> 
+      <span class="cram-level-count N1">0</span>
+    </span>
+  </div>
+  <button id="cramSelectLevelsBtn" class="modal-btn" type="button">Select these</button>
+</div>
+</div>
 
-              <div id="cramSrsDifficultyPanel" class="cram-diff-panel" hidden>
-                <div class="cram-diff-head">
-                  <div id="cramSrsDifficultyText" class="modal-hint" style="margin:0">Difficulty: ALL</div>
-                  <div class="cram-diff-actions">
-                    <button id="cramSrsDifficultySelectBtn" class="cram-mini-btn" type="button">Select matches</button>
-                    <button id="cramSrsDifficultyResetBtn" class="cram-mini-btn" type="button">Reset</button>
+            <div class="cram-flow-section">
+              <div class="cram-flow-title">Filters</div>
+              <div class="modal-hint" style="margin:.1rem 0 .35rem 0">Optional: narrow the list below, then use “Select these”.</div>
+
+              <div class="cram-filter-row cram-filter-row-clean">
+                <div class="cram-filter-group">
+                  <div class="viewall-filter-label">Stars</div>
+                  <div class="cram-stars">
+                    <button class="cram-star-btn active" data-star="any">Any</button>
+                    <button class="cram-star-btn" data-star="starred">Starred</button>
                   </div>
                 </div>
 
-                <div class="cram-diff-sliders" aria-label="Select SRS items by difficulty">
-                  <div class="cram-diff-row cram-diff-toprow">
-                    <span class="cram-diff-row-label">Hard</span>
-                    <span id="cramSrsDifficultyHardVal" class="cram-diff-num" aria-label="Hard bound value">10.00</span>
-                    <span class="cram-diff-spacer" aria-hidden="true"></span>
-                    <span id="cramSrsDifficultyEasyVal" class="cram-diff-num" aria-label="Easy bound value">01.00</span>
-                    <span class="cram-diff-row-label">Easy</span>
+                <div class="cram-filter-group" id="cramSrsFilterGroup" hidden>
+                  <div class="viewall-filter-label">SRS</div>
+                  <div class="cram-stars">
+                    <button class="cram-star-btn active" data-srs="any">Any</button>
+                    <button class="cram-star-btn" data-srs="not">Not in SRS</button>
+                    <button class="cram-star-btn" data-srs="only">SRS Items</button>
                   </div>
 
-                  <div id="cramSrsDifficultyDual" class="cram-diff-dual" aria-label="Difficulty range slider">
-                    <input id="cramSrsDifficultyMin" class="cram-diff-range dual" type="range" min="1" max="10" step="0.1" value="1" list="cramSrsDifficultyMarks" aria-label="Harder bound" />
-                    <input id="cramSrsDifficultyMax" class="cram-diff-range dual" type="range" min="1" max="10" step="0.1" value="10" list="cramSrsDifficultyMarks" aria-label="Easier bound" />
+                  <div class="cram-srs-levels" id="cramSrsLevelFilterWrap" aria-label="Started SRS level filter">
+                    <div class="modal-hint" style="margin:.25rem 0 .15rem 0">Started SRS levels</div>
+                    <div id="cramSrsLevelFilters" class="cram-level-mini">
+                      <button class="cram-mini-level active ALL" data-srslevel="all" type="button" title="All started SRS levels">All</button>
+                      <button class="cram-mini-level N5" data-srslevel="N5" type="button">N5</button>
+                      <button class="cram-mini-level N4" data-srslevel="N4" type="button">N4</button>
+                      <button class="cram-mini-level N3" data-srslevel="N3" type="button">N3</button>
+                      <button class="cram-mini-level N2" data-srslevel="N2" type="button">N2</button>
+                      <button class="cram-mini-level N1" data-srslevel="N1" type="button">N1</button>
+                    </div>
                   </div>
 
-                  <datalist id="cramSrsDifficultyMarks">
-                    <option value="1" label="Hard"></option>
-                    <option value="3"></option>
-                    <option value="5"></option>
-                    <option value="7"></option>
-                    <option value="10" label="Easy"></option>
-                  </datalist>
+
+                    <div id="cramSrsDifficultyPanel" class="cram-diff-panel" hidden>
+                    <div class="cram-diff-head">
+                      <div id="cramSrsDifficultyText" class="modal-hint" style="margin:0">Difficulty: ALL</div>
+                      <div class="cram-diff-actions">
+                        <button id="cramSrsDifficultyResetBtn" class="cram-mini-btn" type="button">Reset</button>
+                      </div>
+                    </div>
+
+                    <div class="cram-diff-sliders" aria-label="Select SRS items by difficulty">
+                      <div class="cram-diff-row cram-diff-toprow">
+                        <span class="cram-diff-row-label">Hard</span>
+                        <span id="cramSrsDifficultyHardVal" class="cram-diff-num" aria-label="Hard bound value">10.00</span>
+                        <span class="cram-diff-spacer" aria-hidden="true"></span>
+                        <span id="cramSrsDifficultyEasyVal" class="cram-diff-num" aria-label="Easy bound value">01.00</span>
+                        <span class="cram-diff-row-label">Easy</span>
+                      </div>
+
+                      <div id="cramSrsDifficultyDual" class="cram-diff-dual" aria-label="Difficulty range slider">
+                        <input id="cramSrsDifficultyMin" class="cram-diff-range dual" type="range" min="1" max="10" step="0.1" value="1" list="cramSrsDifficultyMarks" aria-label="Harder bound" />
+                        <input id="cramSrsDifficultyMax" class="cram-diff-range dual" type="range" min="1" max="10" step="0.1" value="10" list="cramSrsDifficultyMarks" aria-label="Easier bound" />
+                      </div>
+
+                      <datalist id="cramSrsDifficultyMarks">
+                        <option value="1" label="Hard"></option>
+                        <option value="3"></option>
+                        <option value="5"></option>
+                        <option value="7"></option>
+                        <option value="10" label="Easy"></option>
+                      </datalist>
+                    </div>
+                    <div class="modal-hint" style="margin:.15rem 0 0 0">Harder ⟵ drag handles ⟶ Easier</div>
+
+                  </div>
+                </div>              </div>
+              <div class="cram-flow-bar cram-flow-bar-filter">
+                <div id="cramFilterPickPreview" class="cram-pick-preview" title="Grammar">
+
+    <span class="cram-pick-label">Grammar:</span>
+    <span class="cram-emph-num">0</span>
+    <span class="cram-pick-label">JLPT Breakdown:</span>
+    <span class="cram-pick-breakdown">
+      <span class="cram-level-count N5">0</span><span class="cram-level-sep">,</span> 
+      <span class="cram-level-count N4">0</span><span class="cram-level-sep">,</span> 
+      <span class="cram-level-count N3">0</span><span class="cram-level-sep">,</span> 
+      <span class="cram-level-count N2">0</span><span class="cram-level-sep">,</span> 
+      <span class="cram-level-count N1">0</span>
+    </span>
+  </div>
+                <button id="cramSelectMatchesBtn" class="modal-btn" type="button">Select these</button>
+              </div>
+
+            </div>
+
+            <div class="cram-customlists">
+              <div class="viewall-filter-label">Custom lists</div>
+              <div class="cram-customlists-row">
+                <select id="cramCustomListSelect" class="cram-select"></select>
+                <button id="cramLoadCustomListBtn" class="modal-btn" type="button" disabled>Load</button>
+                <button id="cramAddToCustomListBtn" class="modal-btn" type="button" disabled>Add to list</button>
+                <button id="cramDeleteCustomListBtn" class="modal-btn" type="button" disabled>Delete</button>
+              </div>
+              <div class="cram-customlists-row">
+                <input id="cramCustomListName" class="cram-select cram-text" type="text" placeholder="New list name…" />
+                <button id="cramSaveNewCustomListBtn" class="modal-btn" type="button" disabled>Save new</button>
+              </div>
+              <div id="cramCustomListHint" class="modal-hint" style="margin:.1rem 0 0 0">Save your current selection, then load it later from the dropdown.</div>
+            </div>
+
+            <div class="cram-footer-row">
+              <div class="cram-summary-box">
+                <div class="cram-counts">
+                  <div class="cram-session-title">Cram Session:</div>
+                  <div id="cramSelectedCount" class="modal-hint" style="margin:0">Grammar: <span class="cram-emph-num">0</span></div>
+                  <div id="cramTotalCards" class="modal-hint" style="margin:0">Unique Cards: <span class="cram-emph-num">0</span></div>
+                  <div id="cramSelectedByLevel" class="modal-hint cram-selected-levels" style="margin:0">JLPT Breakdown: <span class="cram-level-count N5">0</span>, <span class="cram-level-count N4">0</span>, <span class="cram-level-count N3">0</span>, <span class="cram-level-count N2">0</span>, <span class="cram-level-count N1">0</span></div>
                 </div>
-                <div class="modal-hint" style="margin:.15rem 0 0 0">Harder ⟵ drag handles ⟶ Easier</div>
-
+  <div class="cram-summary-actions">
+    <div class="cram-examples-compact">
+      <div class="viewall-filter-label" style="margin:0">Examples/grammar</div>
+      <input id="cramItemsPerGrammar" class="cram-select cram-number" type="number" min="1" max="10" step="1" value="1" />
+    </div>
+    <div class="cram-start-stack">
+      <button id="cramStartBtn" class="modal-btn primary" disabled>Start</button>
+    </div>
+  </div>
+              </div>
+              <div class="cram-footer-secondary cram-footer-secondary-outside">
+                <button id="cramSelectTodayBtn" class="modal-btn" type="button">Select today&apos;s grammar</button>
+                <button id="cramDeselectAllBtn" class="modal-btn" type="button">Clear selection</button>
               </div>
             </div>
 
-            <div class="cram-filter-group">
-              <div class="viewall-filter-label">Examples per grammar</div>
-              <input id="cramItemsPerGrammar" class="cram-select cram-number" type="number" min="1" max="10" step="1" value="5" />
-            </div>
           </div>
-          <div class="cram-bulk-row">
-            <button id="cramSelectTodayBtn" class="modal-btn">Select today's grammar</button>
-            <button id="cramDeselectAllBtn" class="modal-btn">Deselect all</button>
-          </div>
-
-          <div class="cram-customlists">
-            <div class="viewall-filter-label">Custom lists</div>
-            <div class="cram-customlists-row">
-              <select id="cramCustomListSelect" class="cram-select"></select>
-              <button id="cramLoadCustomListBtn" class="modal-btn" type="button" disabled>Load</button>
-              <button id="cramAddToCustomListBtn" class="modal-btn" type="button" disabled>Add to list</button>
-              <button id="cramDeleteCustomListBtn" class="modal-btn" type="button" disabled>Delete</button>
-            </div>
-            <div class="cram-customlists-row">
-              <input id="cramCustomListName" class="cram-select cram-text" type="text" placeholder="New list name…" />
-              <button id="cramSaveNewCustomListBtn" class="modal-btn" type="button" disabled>Save new</button>
-            </div>
-            <div id="cramCustomListHint" class="modal-hint" style="margin:.1rem 0 0 0">Save your current selection, then load it later from the dropdown.</div>
-          </div>
-
-
-
-
-          <div class="cram-footer-row">
-            <div class="cram-counts">
-              <div id="cramSelectedCount" class="modal-hint" style="margin:0">Selected: 0</div>
-              <div id="cramTotalCards" class="modal-hint" style="margin:0">Total cards: 0</div>
-              <div id="cramSelectedByLevel" class="modal-hint" style="margin:0">Selected Grammar: N5=0, N4=0, N3=0, N2=0, N1=0</div>
-            </div>
-            <button id="cramStartBtn" class="modal-btn primary" disabled>Start</button>
-          </div>
-        </div>
-
-
-        <div class="cram-list-toolbar">
+        </div><div class="cram-list-toolbar">
           <button id="cramCollapseBtn" class="cram-mini-btn cram-collapse-btn" type="button" title="Collapse/expand filters">▴</button>
           <input id="cramSearch" class="viewall-search cram-search" placeholder="Search grammar / meaning…" />
-        </div>
+</div>
 
         <div id="cramList" class="cram-list"></div>
       </div>

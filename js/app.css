@@ -714,7 +714,7 @@ body.no-scores .score-wrap{display:none !important;}
 }
 .cram-front{
   font-size:1.35rem;
-  font-weight:900;
+  font-weight:500;
   line-height:1.45;
   overflow-wrap:anywhere;
   word-break:break-word;
@@ -724,7 +724,7 @@ body.no-scores .score-wrap{display:none !important;}
   align-items:center;justify-content:center;
   width:100%;
 }
-.cram-back .jp{font-size:1.25rem;font-weight:950;line-height:1.45}
+.cram-back .jp{font-size:1.25rem;font-weight:500;line-height:1.45}
 .cram-back .en{font-size:1.05rem;color:rgba(229,231,235,.92);line-height:1.45}
 .cram-back .gp{font-weight:950;letter-spacing:.06em;text-transform:uppercase}
 .cram-back .desc{color:rgba(148,163,184,.95);max-width:560px;line-height:1.45}

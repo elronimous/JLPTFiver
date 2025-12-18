@@ -72,11 +72,13 @@
   let topCollapsed = false;
   let customListSelectEl, customListNameEl, loadCustomListBtn, addToCustomListBtn, deleteCustomListBtn, saveNewCustomListBtn, customListHintEl;
   let levelFiltersEl;
-  let selectTodayBtn, deselectAllBtn;
+  let selectTodayBtn, deselectAllBtn, selectLevelsBtn, selectMatchesBtn;
   let scoreMinEl, scoreMaxEl, itemsPerGrammarEl;
   let scoreRangeGroupEl, srsFilterGroupEl;
   let starBtns;
-  let cramSrsBtns, cramSrsMode = "any";
+  let cramSrsBtns, cramSrsLevelBtns, cramSrsMode = "any";
+  let quickPickPreviewEl, filterPickPreviewEl;
+  let srsLevelFilter = new Set();
 
   // SRS difficulty selection (Cram selection)
   let srsDiffBtn, srsDiffPanelEl, srsDiffMinEl, srsDiffMaxEl, srsDiffTextEl, srsDiffResetBtn, srsDiffSelectBtn;
@@ -117,11 +119,57 @@
   let hasManualSave = false; // becomes true after saving (via Quit) or resuming a saved session
   let undoState = null; // last pre-answer snapshot for UNDO
 
+  // Keyboard: ArrowRight -> reveal back (if on front), otherwise advance (NEXT/Right).
+  let keydownAttached = false;
+  function isTypingInField(){
+    const ae = document.activeElement;
+    if (!ae) return false;
+    const tag = ae.tagName;
+    return ae.isContentEditable || tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT";
+  }
+  function onKeyDown(ev){
+    if (ev.key !== "ArrowRight") return;
+    if (!document.body.classList.contains("cram-session-open")) return;
+    if (isTypingInField()) return;
+
+    // Prevent page scroll while the session overlay is open.
+    ev.preventDefault();
+
+    // If session is complete (results card), do nothing.
+    if (!Array.isArray(deck) || deck.length === 0) return;
+
+    if (!showingBack){
+      showingBack = true;
+      renderCard();
+      return;
+    }
+
+    // Prefer explicit NEXT (after WRONG) if available, otherwise treat as "Right".
+    if (nextBtn && !nextBtn.hidden && !nextBtn.disabled){
+      nextBtn.click();
+      return;
+    }
+    if (rightBtn && !rightBtn.hidden && !rightBtn.disabled){
+      rightBtn.click();
+    }
+  }
+  function attachKeydown(){
+    if (keydownAttached) return;
+    keydownAttached = true;
+    document.addEventListener("keydown", onKeyDown);
+  }
+  function detachKeydown(){
+    if (!keydownAttached) return;
+    keydownAttached = false;
+    document.removeEventListener("keydown", onKeyDown);
+  }
+
   function showSession(on){
     if (!overlayEl) return;
     overlayEl.hidden = !on;
     overlayEl.style.display = on ? "flex" : "none";
     document.body.classList.toggle("cram-session-open", on);
+    if (on) attachKeydown(); else detachKeydown();
   }
 
   function exampleIdOf(gp){
@@ -168,10 +216,15 @@ function getUsableNotes(grammarKey){
       const starred = !!ud.seenExamples[exId];
       if (starFilter === "starred" && !starred) return;
 
-      if (cramSrsMode === "only"){
+      if (cramSrsMode === "only" || cramSrsMode === "not"){
         const srsApi = window.App.SRS;
         const inSrs = !!(srsApi && srsApi.hasGrammarKey && srsApi.hasGrammarKey(gKey));
-        if (!inSrs) return;
+        if (cramSrsMode === "only"){
+          if (!inSrs) return;
+          if (srsLevelFilter && srsLevelFilter.size > 0 && !srsLevelFilter.has(gp.level)) return;
+        } else {
+          if (inSrs) return;
+        }
       }
 
       if (useSrsDiff){
@@ -180,9 +233,10 @@ function getUsableNotes(grammarKey){
         if (!srsApi.hasGrammarKey(gKey)) return;
         const card = srsApi.getCard(gKey);
         const diff = Number(card && card.difficulty);
-        if (!Number.isFinite(diff) || diff <= 0) return;
-        const { dMin, dMax } = srsDiffBounds;
-        if (diff < dMin || diff > dMax) return;
+          if (Number.isFinite(diff) && diff > 0){
+            const { dMin, dMax } = srsDiffBounds;
+            if (diff < dMin || diff > dMax) return;
+          }
       }
 
       const score = getScore(exId);
@@ -202,7 +256,17 @@ function getUsableNotes(grammarKey){
   }
 
   function setCramSrsMode(nextMode){
-    cramSrsMode = nextMode === "only" ? "only" : "any";
+    const raw = (nextMode || "any").toLowerCase();
+    const mode = (raw === "only" || raw === "any" || raw === "not") ? raw : "any";
+    cramSrsMode = mode;
+
+    // Leaving SRS Items clears the started-level filter.
+    if (cramSrsMode !== "only" && srsLevelFilter) srsLevelFilter.clear();
+
+    // Show/hide the started-level filter + difficulty settings together with SRS Items.
+    updateSrsLevelFilterUI();
+    setSrsDifficultyEnabled(cramSrsMode === "only");
+
     if (cramSrsBtns && cramSrsBtns.length){
       cramSrsBtns.forEach(b=>b.classList.remove("active"));
       const btn = cramSrsBtns.find(b => (b.dataset.srs||"") === cramSrsMode) || cramSrsBtns[0];
@@ -285,17 +349,10 @@ function getUsableNotes(grammarKey){
   function setSrsDifficultyEnabled(on){
     const enabled = !!on;
     srsDiffEnabled = enabled;
-    if (srsDiffBtn) srsDiffBtn.classList.toggle("active", enabled);
     if (srsDiffPanelEl) srsDiffPanelEl.hidden = !enabled;
     if (enabled){
-      prevSrsModeBeforeDiff = cramSrsMode;
-      setCramSrsMode("only");
       normalizeSrsDiffRange();
-    } else {
-      // Restore previous SRS filter mode (if any)
-      setCramSrsMode(prevSrsModeBeforeDiff || "any");
     }
-    buildList();
   }
 
   
@@ -323,9 +380,48 @@ function getUsableNotes(grammarKey){
     if (allLevelBtn){
       allLevelBtn.classList.toggle("active", allLevelsOn());
     }
-    selectAllBtns.forEach((btn,lvl)=>{
-      btn.disabled = !levelFilter.has(lvl);
+  }
+
+
+  function updateSrsLevelFilterUI(){
+    const wrap = (modalEl || document).querySelector("#cramSrsLevelFilterWrap");
+    if (wrap){
+      const show = cramSrsMode === "only";
+      wrap.hidden = !show;
+      wrap.classList.toggle("disabled", !show);
+    }
+    if (!cramSrsLevelBtns || !cramSrsLevelBtns.length) return;
+
+    const allBtn = cramSrsLevelBtns.find(b => (b.dataset.srslevel||"").toLowerCase() === "all") || null;
+
+    const isAll = (!srsLevelFilter || srsLevelFilter.size === 0);
+
+    if (isAll){
+      // Treat empty filter as ALL selected (light up all buttons)
+      if (allBtn) allBtn.classList.add("active");
+      cramSrsLevelBtns.forEach(b=>{
+        const k = (b.dataset.srslevel||"").toLowerCase();
+        if (k !== "all") b.classList.add("active");
+      });
+      return;
+    }
+
+    if (allBtn) allBtn.classList.remove("active");
+    cramSrsLevelBtns.forEach(b=>{
+      const lvl = (b.dataset.srslevel||"").toUpperCase();
+      if (!lvl || lvl === "ALL") return;
+      b.classList.toggle("active", srsLevelFilter.has(lvl));
     });
+  }
+
+  function ensureCramSrsOnly(){
+    if (cramSrsMode === "only") return;
+    cramSrsMode = "only";
+    if (cramSrsBtns && cramSrsBtns.length){
+      cramSrsBtns.forEach(b=>b.classList.remove("active"));
+      const onlyBtn = cramSrsBtns.find(b=> (b.dataset.srs||"") === "only");
+      (onlyBtn || cramSrsBtns[0])?.classList.add("active");
+    }
   }
 
   function matchesListFilters(gp, opts){
@@ -429,10 +525,45 @@ function getUsableNotes(grammarKey){
     refreshSelectedCount();
     buildList();
   }
+function resetCramFiltersToDefault(){
+  // Search
+  if (searchEl) searchEl.value = "";
+
+  // Stars
+  starFilter = "any";
+  if (starBtns && starBtns.length){
+    starBtns.forEach(b=>{
+      const isAny = (b.dataset.star || "any") === "any";
+      b.classList.toggle("active", isAny);
+    });
+  }
+
+  // SRS
+  if (srsDiffMinEl) srsDiffMinEl.value = "1";
+  if (srsDiffMaxEl) srsDiffMaxEl.value = "10";
+  normalizeSrsDiffRange();
+
+  setCramSrsMode("any");
+}
+
+function selectAllInActiveLevels(){
+  if (!window.App.State?.flat) return;
+  const lvls = levelFilter || new Set();
+  window.App.State.flat.forEach(gp=>{
+    if (!lvls.has(gp.level)) return;
+    const gKey = grammarKeyOf(gp);
+    if (!hasExamples(gKey)) return;
+    selected.add(exampleIdOf(gp));
+  });
+  refreshSelectedCount();
+  buildList();
+}
+
+
 
 
   function computeTotalCards(){
-    const per = Number(itemsPerGrammarEl?.value || 5);
+    const per = getItemsPerGrammar();
     // Prefer an exact count (limited by available sentences), but fall back to an estimate.
     try{
       if (!window.App.State?.flat) return selected.size * per;
@@ -451,6 +582,112 @@ function getUsableNotes(grammarKey){
     }
   }
 
+  function formatPickPreviewHtml(counts){
+    const grammar = counts.grammar || 0;
+    const by = counts.byLevel || {};
+    const breakdown = ["N5","N4","N3","N2","N1"].map(lvl => {
+      const n = by[lvl] || 0;
+      return `<span class="cram-level-count ${lvl}" aria-label="${lvl} ${n}">${n}</span>`;
+    }).join(`<span class="cram-level-sep">,</span> `);
+
+    return `
+      <span class="cram-pick-label">Grammar:</span>
+      <span class="cram-emph-num">${grammar}</span>
+      <span class="cram-pick-label">JLPT Breakdown:</span>
+      <span class="cram-pick-breakdown">${breakdown}</span>
+    `.trim();
+  }
+
+
+  function getItemsPerGrammar(){
+    const n = Number(itemsPerGrammarEl?.value || 1);
+    if (!Number.isFinite(n) || n <= 0) return 1;
+    return Math.max(1, Math.min(10, Math.round(n)));
+  }
+
+  function computePickCounts(kind){
+    // kind: "quick" or "filter"
+    if (!window.App.State?.flat) return { grammar:0, cards:0, byLevel:{N5:0,N4:0,N3:0,N2:0,N1:0} };
+
+    const ud = Storage.userData;
+    const itemsPer = getItemsPerGrammar();
+
+    const byLevel = { N5:0, N4:0, N3:0, N2:0, N1:0 };
+    let grammar = 0;
+
+    const q = (searchEl?.value || "").trim().toLowerCase();
+    const sMin = Number(scoreMinEl?.value || 0);
+    const sMax = Number(scoreMaxEl?.value || CONST.SCORE_MAX);
+
+    const settings = Storage.settings || {};
+    const srsEnabled = !!settings.srsEnabled;
+    const useSrsDiff = (kind === "filter") && srsEnabled && srsDiffEnabled;
+    const srsDiffBounds = useSrsDiff ? getSrsDifficultyBounds() : null;
+
+    window.App.State.flat.forEach(gp=>{
+      if (!gp || !gp.level) return;
+
+      if (!levelFilter.has(gp.level)) return;
+
+      const gKey = grammarKeyOf(gp);
+      if (!hasExamples(gKey)) return;
+
+      if (kind === "filter"){
+        const exId = exampleIdOf(gp);
+
+        const starred = !!ud.seenExamples[exId];
+        if (starFilter === "starred" && !starred) return;
+
+        // SRS membership filter
+        if (cramSrsMode === "only" || cramSrsMode === "not"){
+          const srsApi = window.App.SRS;
+          const inSrs = !!(srsApi && srsApi.hasGrammarKey && srsApi.hasGrammarKey(gKey));
+          if (cramSrsMode === "only"){
+            if (!inSrs) return;
+            if (srsLevelFilter && srsLevelFilter.size > 0 && !srsLevelFilter.has(gp.level)) return;
+          } else {
+            if (inSrs) return;
+          }
+        }
+
+        if (useSrsDiff){
+          const srsApi = window.App.SRS;
+          if (!(srsApi && srsApi.hasGrammarKey && srsApi.getCard)) return;
+          if (!srsApi.hasGrammarKey(gKey)) return;
+          const card = srsApi.getCard(gKey);
+          const diff = Number(card && card.difficulty);
+          if (Number.isFinite(diff) && diff > 0){
+            const { dMin, dMax } = srsDiffBounds;
+            if (diff < dMin || diff > dMax) return;
+          }
+        }
+
+        const score = getScore(exId);
+        if (score < sMin || score > sMax) return;
+
+        const hay = `${gp.grammar} ${gp.romaji||""} ${gp.meaning||""}`.toLowerCase();
+        if (q && !hay.includes(q)) return;
+      }
+
+      grammar += 1;
+      if (byLevel[gp.level] !== undefined) byLevel[gp.level] += 1;
+    });
+
+    return { grammar, cards: grammar * itemsPer, byLevel };
+  }
+
+  function updatePickPreviews(){
+    if (quickPickPreviewEl){
+      const c = computePickCounts("quick");
+      quickPickPreviewEl.innerHTML = formatPickPreviewHtml(c);
+    }
+    if (filterPickPreviewEl){
+      const c = computePickCounts("filter");
+      filterPickPreviewEl.innerHTML = formatPickPreviewHtml(c);
+    }
+  }
+
+
 
   function refreshSelectedByLevel(){
     if (!selectedByLevelEl) return;
@@ -460,15 +697,20 @@ function getUsableNotes(grammarKey){
       if (counts[lvl] == null) counts[lvl] = 0;
       counts[lvl] += 1;
     });
-    selectedByLevelEl.textContent = `Selected Grammar: N5=${counts.N5||0}, N4=${counts.N4||0}, N3=${counts.N3||0}, N2=${counts.N2||0}, N1=${counts.N1||0}`;
+    selectedByLevelEl.innerHTML = `JLPT Breakdown: ` +
+      ["N5","N4","N3","N2","N1"].map(lvl => {
+        const n = counts[lvl]||0;
+        return `<span class="cram-level-count ${lvl}" aria-label="${lvl} ${n}">${n}</span>`;
+      }).join(`<span class="cram-level-sep">,</span> `);
   }
 
 function refreshSelectedCount(){
-    if (selectedCountEl) selectedCountEl.textContent = `Selected: ${selected.size}`;
-    if (totalCardsEl) totalCardsEl.textContent = `Total cards: ${computeTotalCards()}`;
+    if (selectedCountEl) selectedCountEl.innerHTML = `Grammar: <span class="cram-emph-num">${selected.size}</span>`;
+    if (totalCardsEl) totalCardsEl.innerHTML = `Unique Cards: <span class="cram-emph-num">${computeTotalCards()}</span>`;
     refreshSelectedByLevel();
     if (startBtn) startBtn.disabled = selected.size === 0;
     updateCustomListButtons();
+    updatePickPreviews();
   }
 
 
@@ -621,9 +863,10 @@ function refreshSelectedCount(){
     if (!srsEnabled){
       // Reset SRS-only filter if SRS is disabled.
       cramSrsMode = "any";
-      srsDiffEnabled = false;
-      if (srsDiffBtn) srsDiffBtn.classList.remove("active");
-      if (srsDiffPanelEl) srsDiffPanelEl.hidden = true;
+      if (srsLevelFilter) srsLevelFilter.clear();
+      setSrsDifficultyEnabled(false);
+      updateSrsLevelFilterUI();
+
       if (cramSrsBtns && cramSrsBtns.length){
         cramSrsBtns.forEach(b=>b.classList.remove("active"));
         const anyBtn = cramSrsBtns.find(b=> (b.dataset.srs||"") === "any") || cramSrsBtns[0];
@@ -662,10 +905,15 @@ function buildList(){
       const starred = !!ud.seenExamples[exId];
       if (starFilter === "starred" && !starred) return;
 
-      if (cramSrsMode === "only"){
+      if (cramSrsMode === "only" || cramSrsMode === "not"){
         const srsApi = window.App.SRS;
         const inSrs = !!(srsApi && srsApi.hasGrammarKey && srsApi.hasGrammarKey(gKey));
-        if (!inSrs) return;
+        if (cramSrsMode === "only"){
+          if (!inSrs) return;
+          if (srsLevelFilter && srsLevelFilter.size > 0 && !srsLevelFilter.has(gp.level)) return;
+        } else {
+          if (inSrs) return;
+        }
       }
 
       if (useSrsDiff){
@@ -674,9 +922,10 @@ function buildList(){
         if (!srsApi.hasGrammarKey(gKey)) return;
         const card = srsApi.getCard(gKey);
         const diff = Number(card && card.difficulty);
-        if (!Number.isFinite(diff) || diff <= 0) return;
-        const { dMin, dMax } = srsDiffBounds;
-        if (diff < dMin || diff > dMax) return;
+          if (Number.isFinite(diff) && diff > 0){
+            const { dMin, dMax } = srsDiffBounds;
+            if (diff < dMin || diff > dMax) return;
+          }
       }
 
       const score = getScore(exId);
@@ -806,6 +1055,8 @@ function buildList(){
       none.textContent = "No matches for those filters (or no examples exist).";
       listEl.appendChild(none);
     }
+
+    updatePickPreviews();
   }
 
   function open(){
@@ -813,9 +1064,12 @@ function buildList(){
     // Start Cram with the same level filters as the main page
     syncLevelFilterFromMain();
 
+    updatePickPreviews();
+
     isOpen = true;
     modalEl.hidden = false;
     applySrsUiVisibility();
+    updateSrsLevelFilterUI();
     refreshCustomListDropdown(true);
     refreshSelectedCount();
     buildList();
@@ -998,7 +1252,7 @@ function hasSavedSession(){
   }
 
   function buildDeckFromExampleIds(exampleIds, itemsPerGrammarOverride){
-    const itemsPerGrammar = Number((itemsPerGrammarOverride ?? itemsPerGrammarEl?.value) || 5);
+    const itemsPerGrammar = Math.max(1, Math.min(10, Number((itemsPerGrammarOverride ?? itemsPerGrammarEl?.value)) || 1));
     deck = [];
 
     (exampleIds || []).forEach(exId => {
@@ -1094,7 +1348,7 @@ showSession(true);
         <div class="cram-wrong-list">${wrongListHtml}</div>
         <div class="cram-results-retry-controls">
           <div class="viewall-filter-label">Retry examples per grammar:</div>
-          <input id="cramRetryItemsPerGrammar" class="cram-select cram-number" type="number" min="1" max="10" step="1" value="${Number(itemsPerGrammarEl?.value || 5)}" />
+          <input id="cramRetryItemsPerGrammar" class="cram-select cram-number" type="number" min="1" max="10" step="1" value="${Number(itemsPerGrammarEl?.value || 1)}" />
         </div>
         <div class="cram-results-actions">
           <button class="cram-action next" type="button" data-action="retry-wrong">Try these ones again!</button>
@@ -1162,14 +1416,14 @@ cardEl.innerHTML = `
     cardEl.querySelector('[data-action="retry-wrong"]')?.addEventListener('click', (e)=>{
       e.preventDefault();
       e.stopPropagation();
-      const per = Math.max(1, Math.min(10, Number(cardEl.querySelector('#cramRetryItemsPerGrammar')?.value || itemsPerGrammarEl?.value || 5)));
+      const per = Math.max(1, Math.min(10, Number(cardEl.querySelector('#cramRetryItemsPerGrammar')?.value || itemsPerGrammarEl?.value || 1)));
       restartWithExampleIds(wrongExampleIds, per);
     });
 
     cardEl.querySelector('[data-action="pick-wrong"]')?.addEventListener('click', (e)=>{
       e.preventDefault();
       e.stopPropagation();
-      const per = Math.max(1, Math.min(10, Number(cardEl.querySelector('#cramRetryItemsPerGrammar')?.value || itemsPerGrammarEl?.value || 5)));
+      const per = Math.max(1, Math.min(10, Number(cardEl.querySelector('#cramRetryItemsPerGrammar')?.value || itemsPerGrammarEl?.value || 1)));
       openCramWithPreselected(wrongExampleIds, per);
     });
 
@@ -1712,7 +1966,8 @@ if (showingBack && usableCount > 1){
   }
 
 
-  Cram.refreshIfOpen = () => { if (isOpen){ applySrsUiVisibility(); buildList(); } };
+  Cram.refreshIfOpen = () => { if (isOpen){ applySrsUiVisibility();
+    updateSrsLevelFilterUI(); buildList(); } };
 
   Cram.init = () => {
     const openBtn = Utils.qs("#openCramBtn");
@@ -1729,6 +1984,10 @@ if (showingBack && usableCount > 1){
     levelFiltersEl = Utils.qs("#cramLevelFilters");
     selectTodayBtn = Utils.qs("#cramSelectTodayBtn");
     deselectAllBtn = Utils.qs("#cramDeselectAllBtn");
+    selectLevelsBtn = Utils.qs("#cramSelectLevelsBtn");
+    selectMatchesBtn = Utils.qs("#cramSelectMatchesBtn");
+    quickPickPreviewEl = Utils.qs("#cramQuickPickPreview");
+    filterPickPreviewEl = Utils.qs("#cramFilterPickPreview");
     scoreRangeGroupEl = Utils.qs("#cramScoreRangeGroup");
     srsFilterGroupEl = Utils.qs("#cramSrsFilterGroup");
 
@@ -1782,6 +2041,8 @@ if (showingBack && usableCount > 1){
     starBtns = Array.from((modalEl || document).querySelectorAll(".cram-star-btn[data-star]"));
 
     cramSrsBtns = Array.from((modalEl || document).querySelectorAll("#cramSrsFilterGroup [data-srs]"));
+
+    cramSrsLevelBtns = Array.from((modalEl || document).querySelectorAll("#cramSrsLevelFilters [data-srslevel]"));
 
     showSession(false);
     if (nextBtn){ nextBtn.hidden = true; nextBtn.disabled = true; }
@@ -1871,6 +2132,18 @@ if (showingBack && usableCount > 1){
       buildList();
     });
 
+    // Quick select: ignore extra filters and grab everything in the chosen levels.
+    selectLevelsBtn?.addEventListener("click", ()=>{
+      resetCramFiltersToDefault();
+      selectAllInActiveLevels();
+    });
+
+    // Filter select: add everything that matches the current filters + search.
+    selectMatchesBtn?.addEventListener("click", ()=>{
+      if (srsDiffEnabled) normalizeSrsDiffRange();
+      selectAllMatchingCurrentFilters();
+    });
+
     // Custom lists
     refreshCustomListDropdown(true);
     customListSelectEl?.addEventListener("change", updateCustomListButtons);
@@ -1891,8 +2164,6 @@ if (showingBack && usableCount > 1){
     allLevelBtn = null;
 
     // "All" behaves like main page (toggles every level on/off)
-    const allCol = document.createElement("div");
-    allCol.className = "cram-level-col";
     const allBtn = document.createElement("button");
     allBtn.type = "button";
     allBtn.className = "level-filter-btn ALL";
@@ -1906,15 +2177,11 @@ if (showingBack && usableCount > 1){
       updateLevelFilterUI();
       buildList();
     });
-    allCol.appendChild(allBtn);
-    levelFiltersEl.appendChild(allCol);
+    levelFiltersEl.appendChild(allBtn);
     allLevelBtn = allBtn;
 
-    // Per-level toggles + "Select all" buttons under each
+    // Per-level toggles (selection is handled by the "Select levels" button)
     CONST.LEVEL_ORDER.forEach(lvl=>{
-      const col = document.createElement("div");
-      col.className = "cram-level-col";
-
       const b = document.createElement("button");
       b.type = "button";
       b.className = `level-filter-btn ${lvl}`;
@@ -1925,26 +2192,11 @@ if (showingBack && usableCount > 1){
         updateLevelFilterUI();
         buildList();
       });
-
-      const sel = document.createElement("button");
-      sel.type = "button";
-      sel.className = "cram-mini-btn";
-      sel.textContent = `Select all ${lvl}`;
-      sel.addEventListener("click", (ev)=>{
-        ev.preventDefault();
-        ev.stopPropagation();
-        selectAllForLevel(lvl);
-      });
-
-      col.appendChild(b);
-      col.appendChild(sel);
-      levelFiltersEl.appendChild(col);
-
+      levelFiltersEl.appendChild(b);
       levelBtns.set(lvl, b);
-      selectAllBtns.set(lvl, sel);
     });
 
-    // Initial sync to main page filters
+// Initial sync to main page filters
     syncLevelFilterFromMain();
 
     if (starBtns.length){
@@ -1958,27 +2210,47 @@ if (showingBack && usableCount > 1){
       });
     }
 
-    // SRS filter (Any / In SRS)
+    // SRS filter (Any / Not in SRS / SRS Items)
     cramSrsBtns.forEach(btn=>{
       btn.addEventListener("click", ()=>{
-        cramSrsBtns.forEach(b=>b.classList.remove("active"));
-        btn.classList.add("active");
-        cramSrsMode = btn.dataset.srs || "any";
-        // If user switches to "Any", turn off difficulty-based selection.
-        if (cramSrsMode !== "only" && srsDiffEnabled){
-          setSrsDifficultyEnabled(false);
-          return;
-        }
+        const next = (btn.dataset.srs || "any").toLowerCase();
+        setCramSrsMode(next);
         buildList();
       });
     });
 
-    // SRS difficulty range toggle
-    srsDiffBtn?.addEventListener("click", ()=>{
-      setSrsDifficultyEnabled(!srsDiffEnabled);
-    });
+// Started SRS level filter buttons
+    if (cramSrsLevelBtns && cramSrsLevelBtns.length){
+      cramSrsLevelBtns.forEach(btn=>{
+        btn.addEventListener("click", ()=>{
+          const raw = (btn.dataset.srslevel || "").toLowerCase();
+          if (raw === "all"){
+            srsLevelFilter.clear();
+            // Keep current SRS mode; ALL means "no extra level restriction".
+            updateSrsLevelFilterUI();
+            buildList();
+            return;
+          }
 
-    function onSrsDiffInput(){
+          // Selecting specific levels implies "In SRS"
+          ensureCramSrsOnly();
+
+          const lvl = (btn.dataset.srslevel || "").toUpperCase();
+          if (!lvl) return;
+          if (srsLevelFilter.has(lvl)) srsLevelFilter.delete(lvl);
+          else srsLevelFilter.add(lvl);
+
+          // If user toggles everything off, treat it as ALL
+          if (srsLevelFilter.size === 0){
+            srsLevelFilter.clear();
+          }
+
+          updateSrsLevelFilterUI();
+          buildList();
+        });
+      });
+    }
+function onSrsDiffInput(){
       normalizeSrsDiffRange();
       if (srsDiffEnabled) buildList();
     }

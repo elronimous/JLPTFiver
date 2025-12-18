@@ -33,6 +33,54 @@
   const answeredOnceThisSession = new Set();
   let showingBack = false;
   let awaitingNext = false;
+
+  // Keyboard: ArrowRight -> reveal back (if on front), otherwise advance (NEXT/Right).
+  let keydownAttached = false;
+  function isTypingInField(){
+    const ae = document.activeElement;
+    if (!ae) return false;
+    const tag = ae.tagName;
+    return ae.isContentEditable || tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT";
+  }
+  function onKeyDown(ev){
+    if (ev.key !== "ArrowRight") return;
+    if (!isOpen) return;
+    if (statsBackdropEl && !statsBackdropEl.hidden) return;
+    if (fsrsBackdropEl && !fsrsBackdropEl.hidden) return;
+    if (isTypingInField()) return;
+
+    // Prevent page scroll while the session overlay is open.
+    ev.preventDefault();
+
+    // If deck is empty, do nothing.
+    if (!Array.isArray(deck) || deck.length === 0) return;
+
+    if (!showingBack){
+      showingBack = true;
+      renderCard();
+      return;
+    }
+
+    // Prefer explicit NEXT (after WRONG) if available, otherwise treat as "Right".
+    if (nextBtn && !nextBtn.hidden && !nextBtn.disabled){
+      nextBtn.click();
+      return;
+    }
+    if (rightBtn && !rightBtn.hidden && !rightBtn.disabled){
+      rightBtn.click();
+    }
+  }
+  function attachKeydown(){
+    if (keydownAttached) return;
+    keydownAttached = true;
+    document.addEventListener("keydown", onKeyDown);
+  }
+  function detachKeydown(){
+    if (!keydownAttached) return;
+    keydownAttached = false;
+    document.removeEventListener("keydown", onKeyDown);
+  }
+
   let wrongCount = 0;
   let rightCount = 0;
   let totalInitial = 0;
@@ -1143,6 +1191,7 @@ if (showingBack && usableCount > 1){
   function open(){
     if (!overlayEl) return;
     isOpen = true;
+    attachKeydown();
     answeredOnceThisSession.clear();
     undoState = null;
     setUndoEnabled();
@@ -1161,6 +1210,7 @@ if (showingBack && usableCount > 1){
 
   function close(){
     isOpen = false;
+    detachKeydown();
     answeredOnceThisSession.clear();
     undoState = null;
     setUndoEnabled();
