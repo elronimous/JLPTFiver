@@ -645,6 +645,96 @@ body.no-scores .score-wrap{display:none !important;}
 }
 .hm-tooltip.show{opacity:1}
 
+/* Study Log: Snake mini-game */
+.hm-cell-btn.snake{
+  outline:2px solid rgba(56,189,248,.35);
+  outline-offset:-2px;
+}
+.hm-cell-btn.snake-head{
+  outline-color:rgba(56,189,248,.92);
+  box-shadow:0 0 0 2px rgba(56,189,248,.22), 0 0 18px rgba(56,189,248,.12);
+}
+.hm-snake-target{
+  position:absolute;
+  left:50%; top:50%;
+  transform:translate(-50%,-50%);
+  pointer-events:none;
+  line-height:1;
+  font-size: calc(var(--hm-cell) * 0.95);
+  filter: drop-shadow(0 2px 6px rgba(0,0,0,.75));
+}
+.hm-snake-backdrop{
+  position:fixed;
+  inset:0;
+  /* Must sit ABOVE the page so it can blur it, but BELOW the Study Log panel */
+  z-index:80;
+  pointer-events:none;
+  background:radial-gradient(circle at top, rgba(2,6,23,.12), rgba(2,6,23,.52));
+  backdrop-filter: blur(2px);
+}
+.hm-snake-overlay{
+  position:fixed;
+  inset:0;
+  z-index:100;
+  pointer-events:none;
+}
+
+/* Keep the Study Log crisp while the snake blur backdrop is active */
+body.snake-mode #heatmapPanel{
+  position:relative;
+  z-index:90;
+}
+.hm-snake-overlay .hm-snake-quit{
+  position:fixed;
+  top:1rem;
+  right:1rem;
+  pointer-events:auto;
+}
+.hm-snake-score{
+  position:fixed;
+  pointer-events:none;
+  bottom:1rem;
+  right:1rem;
+  font-weight:900;
+  letter-spacing:.06em;
+  padding:.35rem .6rem;
+  border-radius:.65rem;
+  border:1px solid rgba(148,163,184,.28);
+  background:rgba(2,6,23,.55);
+  box-shadow:0 14px 30px rgba(0,0,0,.55);
+  user-select:none;
+}
+.hm-snake-center{
+  position:fixed;
+  pointer-events:none;
+  left:50%;
+  top:50%;
+  transform:translate(-50%,-50%);
+  text-align:center;
+  user-select:none;
+}
+.hm-snake-center-main{
+  font-size:3.2rem;
+  font-weight:1000;
+  letter-spacing:.08em;
+  text-transform:uppercase;
+  text-shadow:0 16px 40px rgba(0,0,0,.75);
+}
+.hm-snake-center-sub{
+  margin-top:.35rem;
+  font-size:.9rem;
+  color:rgba(148,163,184,.95);
+  max-width:min(520px, 88vw);
+}
+/* When playing, keep the center copy subtle */
+.hm-snake-overlay.playing .hm-snake-center-main{
+  font-size:1.15rem;
+  opacity:.55;
+}
+.hm-snake-overlay.playing .hm-snake-center-sub{
+  opacity:.75;
+}
+
 /* Progressive dates UI */
 .progressive-wrap{
   margin-top:.55rem;
@@ -1647,3 +1737,244 @@ body.no-scores .score-wrap{display:none !important;}
 /* Make the total selected section + Start stand out slightly more */
 .cram-summary-box .modal-hint{ font-size:.88rem; }
 #cramStartBtn{ font-size:1.05rem; padding:.55rem 1.05rem; }
+
+/* ------------------------------
+   Header easter egg: JLPT Invaders
+   (Long-press N5..N1 for 5s)
+-------------------------------- */
+body.invaders-mode{ overflow:hidden; }
+
+.level-filter-btn.invaders-holding{
+  outline:2px solid rgba(56,189,248,.85);
+  outline-offset:2px;
+  box-shadow:0 0 0 3px rgba(56,189,248,.18), 0 18px 45px rgba(0,0,0,.55);
+}
+
+.invaders-backdrop{
+  position:fixed;
+  inset:0;
+  z-index:220;
+  pointer-events:none;
+  background:radial-gradient(circle at top, rgba(2,6,23,.10), rgba(2,6,23,.72));
+  backdrop-filter: blur(3px);
+}
+.invaders-overlay{
+  position:fixed;
+  inset:0;
+  z-index:240;
+  pointer-events:none;
+}
+.invaders-overlay .invaders-canvas{
+  position:fixed;
+  inset:0;
+}
+.invaders-overlay .invaders-quit{
+  position:fixed;
+  top:1rem;
+  right:1rem;
+  pointer-events:auto;
+}
+.invaders-lives,
+.invaders-score{
+  position:fixed;
+  pointer-events:none;
+  font-weight:950;
+  letter-spacing:.06em;
+  padding:.35rem .6rem;
+  border-radius:.65rem;
+  border:1px solid rgba(148,163,184,.28);
+  background:rgba(2,6,23,.55);
+  box-shadow:0 14px 30px rgba(0,0,0,.55);
+  user-select:none;
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: "tnum";
+}
+.invaders-lives{ top:1rem; left:1rem; }
+.invaders-score{ bottom:1rem; right:1rem; }
+
+.invaders-center{
+  position:fixed;
+  left:50%;
+  top:1rem;
+  transform:translateX(-50%);
+  pointer-events:none;
+  padding:.35rem .65rem;
+  border-radius:.75rem;
+  border:1px solid rgba(148,163,184,.22);
+  background:rgba(2,6,23,.42);
+  color:rgba(226,232,240,.95);
+  font-weight:850;
+  text-align:center;
+  max-width:min(720px, 92vw);
+  box-shadow:0 12px 26px rgba(0,0,0,.45);
+}
+
+.invaders-definition{
+  position:fixed;
+  left:50%;
+  bottom:4.2rem;
+  transform:translateX(-50%);
+  pointer-events:none;
+  padding:.55rem .8rem;
+  border-radius:1rem;
+  border:1px solid rgba(148,163,184,.22);
+  background:rgba(2,6,23,.55);
+  color:rgba(226,232,240,.95);
+  text-align:center;
+  max-width:min(900px, 92vw);
+  box-shadow:0 18px 40px rgba(0,0,0,.6);
+  line-height:1.25;
+}
+
+/* For Invaders: keep the grammar description centered and easy to read */
+body.invaders-mode .invaders-definition{
+  bottom:auto;
+  top:50%;
+  transform:translate(-50%, -50%);
+  max-width:min(920px, 88vw);
+}
+
+/* Flashcard shown after a correct hit */
+.invaders-flashcard{
+  position:fixed;
+  inset:0;
+  z-index:265;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  pointer-events:auto;
+}
+.invaders-flashcard-card{
+  width:min(980px, 92vw);
+  max-height:min(78vh, 640px);
+  overflow:auto;
+  pointer-events:auto;
+  padding:1.1rem 1.2rem;
+  padding-bottom:2.8rem;
+  border-radius:1.25rem;
+  border:1px solid rgba(148,163,184,.24);
+  background:rgba(2,6,23,.78);
+  box-shadow:0 24px 60px rgba(0,0,0,.70);
+  backdrop-filter: blur(8px);
+
+  position:relative;}
+.invaders-flashcard-title{
+  font-weight:900;
+  font-size:1.4rem;
+  line-height:1.1;
+  margin-bottom:.35rem;
+  text-align:center;
+}
+.invaders-flashcard-desc{
+  font-weight:650;
+  color:rgba(226,232,240,.95);
+  text-align:center;
+  margin-bottom:.85rem;
+}
+.invaders-flashcard-jp{
+  font-weight:750;
+  font-size:1.15rem;
+  line-height:1.35;
+  margin:.5rem 0 .45rem;
+  text-align:center;
+}
+.invaders-flashcard-en{
+  font-weight:550;
+  color:rgba(203,213,225,.95);
+  line-height:1.35;
+  text-align:center;
+  margin-bottom:.85rem;
+}
+.invaders-flashcard-hint{
+  text-align:center;
+  font-weight:700;
+  color:rgba(148,163,184,.95);
+}
+
+
+/* Mode picker shown after long-press */
+.invaders-picker-backdrop{
+  position:fixed;
+  inset:0;
+  z-index:245;
+  background:rgba(2,6,23,.55);
+  backdrop-filter: blur(6px);
+}
+.invaders-picker{
+  position:fixed;
+  inset:0;
+  z-index:260;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  pointer-events:auto;
+}
+.invaders-picker-card{
+  width:min(520px, 92vw);
+  border-radius:1.25rem;
+  border:1px solid rgba(148,163,184,.22);
+  background:rgba(2,6,23,.72);
+  box-shadow:0 26px 70px rgba(0,0,0,.72);
+  padding:1rem 1.1rem;
+  text-align:center;
+}
+.invaders-picker-title{
+  font-weight:950;
+  letter-spacing:.03em;
+  font-size:1.15rem;
+  color:rgba(226,232,240,.96);
+}
+.invaders-picker-sub{
+  margin-top:.35rem;
+  color:rgba(148,163,184,.95);
+  font-size:.92rem;
+}
+.invaders-picker-levels{
+  margin-top:.85rem;
+}
+.invaders-picker-levels-label{
+  text-align:center;
+  font-size:.85rem;
+  letter-spacing:.02em;
+  color:rgba(148,163,184,.95);
+  margin-bottom:.5rem;
+}
+.invaders-picker-levels-row{
+  display:flex;
+  justify-content:center;
+  gap:.5rem;
+  flex-wrap:wrap;
+}
+.invaders-picker-levels-row .level-filter-btn{
+  pointer-events:auto;
+  min-width:56px;
+  padding:.35rem .65rem;
+  border-radius:.9rem;
+}
+.invaders-picker-btns{
+  margin-top:.95rem;
+  display:flex;
+  gap:.65rem;
+  justify-content:center;
+  flex-wrap:wrap;
+}
+.invaders-picker-btns .chip-btn{
+  pointer-events:auto;
+  min-width:150px;
+  padding:.6rem 1rem;
+}
+.invaders-picker-cancel{
+  margin-top:.85rem;
+  display:inline-block;
+  pointer-events:auto;
+  opacity:.92;
+}
+
+/* Asteroids mode wants the definition dead-center */
+body.asteroids-mode .invaders-definition{
+  top:50%;
+  bottom:auto;
+  transform:translate(-50%,-50%);
+  font-size:1.12rem;
+  padding:.85rem 1.05rem;
+}

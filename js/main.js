@@ -22,6 +22,10 @@
     // Load grammar
     await window.App.Csv.load();
 
+    // Header easter eggs
+    window.App.Invaders && window.App.Invaders.init && window.App.Invaders.init();
+
+
     // Init modules
     window.App.Scores?.applyEnabled(Storage.settings.scoresEnabled && !Storage.settings.srsEnabled);
     window.App.Notes?.init();

@@ -22,6 +22,34 @@
   let goalCycleToken = 0; // bump to cancel pending fades on re-render
   let goalMarkers = []; // {emojiEl, emojis, idx}
 
+  // --- Snake mini-game (hold today's cell for 5s) ---
+  let snakeOverlay = null;
+  let snakeBackdrop = null;
+  let snakeQuitBtn = null;
+  let snakeScoreEl = null;
+  let snakeCenterEl = null;
+  let snakeSubEl = null;
+
+  let snakeActive = false;
+  let snakeCountdownActive = false;
+  let snakeHoldTimer = null;
+  let snakeCountdownTimer = null;
+  let snakeTickTimer = null;
+  let suppressClicksUntil = 0;
+
+  let snake = [];            // indices into hmGrid children, [head, ...]
+  let snakeSet = new Set();  // quick collision checks
+  let snakeDir = { dx: 1, dy: 0 };
+  let snakeDirQueue = []; // queued direction inputs (max 2) applied one per tick
+  let snakeCols = 0;
+  let snakeRows = 7;
+  let snakeTargetIdx = -1;
+  let snakeTargetEl = null;
+  let snakeScore = 0;
+  let snakeGameOver = false;
+
+  const SNAKE_TARGET_EMOJIS = ["🍙","📚","📝","✨","🎯","🧠","⭐","🔥","🍡","🌙","💿","🕹️"];
+
   let state = {
     visible: true,                // enabled by default
     viewYear: new Date().getFullYear(),
@@ -142,6 +170,337 @@ function startGoalEmojiCycler(){
   }
 
   function computeTotal(){ return getActiveVisitedYMDs().length; }
+
+  // ------------------------
+  // Snake mini-game helpers
+  // ------------------------
+  function ensureSnakeOverlay(){
+  // Backdrop provides the blur/dim layer. UI overlay sits above the Study Log.
+  if (!snakeBackdrop){
+    snakeBackdrop = document.createElement("div");
+    snakeBackdrop.className = "hm-snake-backdrop";
+    snakeBackdrop.hidden = true;
+    document.body.appendChild(snakeBackdrop);
+  }
+
+  if (snakeOverlay) return;
+
+  snakeOverlay = document.createElement("div");
+  snakeOverlay.className = "hm-snake-overlay";
+  snakeOverlay.hidden = true;
+  snakeOverlay.innerHTML = `
+    <button type="button" class="chip-btn hm-snake-quit">QUIT</button>
+    <div class="hm-snake-score">Score: 0</div>
+    <div class="hm-snake-center" aria-live="polite">
+      <div class="hm-snake-center-main">3</div>
+      <div class="hm-snake-center-sub"></div>
+    </div>
+  `;
+
+  document.body.appendChild(snakeOverlay);
+  snakeQuitBtn = snakeOverlay.querySelector(".hm-snake-quit");
+  snakeScoreEl = snakeOverlay.querySelector(".hm-snake-score");
+  snakeCenterEl = snakeOverlay.querySelector(".hm-snake-center-main");
+  snakeSubEl = snakeOverlay.querySelector(".hm-snake-center-sub");
+
+  snakeQuitBtn.addEventListener("click", ()=>stopSnakeGame());
+  snakeQuitBtn.addEventListener("contextmenu", (ev)=>{ ev.preventDefault(); });
+}
+
+  function showSnakeOverlay(){
+    ensureSnakeOverlay();
+    document.body.classList.add("snake-mode");
+    if (snakeBackdrop) snakeBackdrop.hidden = false;
+    if (snakeOverlay) snakeOverlay.hidden = false;
+  }
+
+  function hideSnakeOverlay(){
+    document.body.classList.remove("snake-mode");
+    if (snakeBackdrop) snakeBackdrop.hidden = true;
+    if (!snakeOverlay) return;
+    snakeOverlay.hidden = true;
+    snakeOverlay.classList.remove("playing");
+    snakeOverlay.classList.remove("gameover");
+  }
+
+  function updateSnakeScoreUI(){
+    if (!snakeScoreEl) return;
+    snakeScoreEl.textContent = `Score: ${snakeScore}`;
+  }
+
+  function snakeIdxFromColRow(col, row){
+    const c = (col + snakeCols) % snakeCols;
+    const r = (row + snakeRows) % snakeRows;
+    return c * snakeRows + r;
+  }
+
+  function clearSnakeVisuals(cells){
+    (snake||[]).forEach(idx=>{
+      const el = cells[idx];
+      if (!el) return;
+      el.classList.remove("snake", "snake-head");
+    });
+    snake = [];
+    snakeSet = new Set();
+
+    if (snakeTargetEl && snakeTargetEl.parentNode) snakeTargetEl.parentNode.removeChild(snakeTargetEl);
+    snakeTargetEl = null;
+    snakeTargetIdx = -1;
+  }
+
+  function placeSnakeTarget(cells){
+    if (snakeTargetEl && snakeTargetEl.parentNode) snakeTargetEl.parentNode.removeChild(snakeTargetEl);
+    snakeTargetEl = null;
+    snakeTargetIdx = -1;
+
+    const inYear = [];
+    for (let i=0;i<cells.length;i++){
+      if (cells[i]?.dataset?.inyear === "1") inYear.push(i);
+    }
+    const candidates = inYear.filter(i=>!snakeSet.has(i));
+    if (!candidates.length){
+      snakeGameOver = true;
+      if (snakeTickTimer) clearInterval(snakeTickTimer);
+      snakeTickTimer = null;
+      snakeOverlay?.classList.add("gameover");
+      snakeCenterEl.textContent = "YOU WIN";
+      snakeSubEl.textContent = "Press R to restart, or QUIT.";
+      return;
+    }
+
+    snakeTargetIdx = candidates[Math.floor(Math.random() * candidates.length)];
+    snakeTargetEl = document.createElement("div");
+    snakeTargetEl.className = "hm-snake-target";
+    snakeTargetEl.textContent = SNAKE_TARGET_EMOJIS[Math.floor(Math.random() * SNAKE_TARGET_EMOJIS.length)];
+    cells[snakeTargetIdx].appendChild(snakeTargetEl);
+  }
+
+  function startSnakeCountdown(){
+    // Only in the real current year
+    const now = new Date();
+    const curYear = now.getFullYear();
+    if (Number(state.viewYear) !== curYear) return;
+    if (snakeActive || snakeCountdownActive) return;
+
+    ensureSnakeOverlay();
+    stopGoalCycleTimer();
+    Tooltip.hide();
+
+    snakeCountdownActive = true;
+    snakeGameOver = false;
+    snakeScore = 0;
+    updateSnakeScoreUI();
+
+    showSnakeOverlay();
+    snakeOverlay.classList.remove("playing", "gameover");
+    snakeCenterEl.textContent = "3";
+    snakeSubEl.textContent = "Get ready…";
+
+    let remaining = 3;
+    if (snakeCountdownTimer) clearInterval(snakeCountdownTimer);
+    snakeCountdownTimer = setInterval(()=>{
+      remaining -= 1;
+      if (remaining > 0){
+        snakeCenterEl.textContent = String(remaining);
+        return;
+      }
+      clearInterval(snakeCountdownTimer);
+      snakeCountdownTimer = null;
+      snakeCenterEl.textContent = "GO";
+      setTimeout(()=>startSnakeGame(), 150);
+    }, 1000);
+  }
+
+  function onSnakeKey(ev){
+    if (!snakeActive && !snakeCountdownActive) return;
+
+    const k = ev.key;
+    if (k === "Escape"){
+      ev.preventDefault();
+      stopSnakeGame();
+      return;
+    }
+
+    // Restart (only after game over)
+    if (snakeGameOver && (k === "r" || k === "R" || k === "Enter")){
+      ev.preventDefault();
+      startSnakeGame();
+      return;
+    }
+
+    if (!snakeActive || snakeGameOver) return;
+
+    let next = null;
+    if (k === "ArrowUp" || k === "w" || k === "W") next = { dx:0, dy:-1 };
+    if (k === "ArrowDown" || k === "s" || k === "S") next = { dx:0, dy:1 };
+    if (k === "ArrowLeft" || k === "a" || k === "A") next = { dx:-1, dy:0 };
+    if (k === "ArrowRight" || k === "d" || k === "D") next = { dx:1, dy:0 };
+
+    if (!next) return;
+
+    // Queue inputs so "down then left quickly" becomes two separate turns across two ticks
+    // (prevents unfair neck-collisions when multiple keys are pressed between ticks)
+    const base = (snakeDirQueue.length ? snakeDirQueue[snakeDirQueue.length-1] : snakeDir);
+
+    // prevent 180° reversal relative to the most recently committed/queued direction
+    if (next.dx === -base.dx && next.dy === -base.dy) return;
+
+    // ignore duplicates
+    if (next.dx === base.dx && next.dy === base.dy) return;
+
+    // keep a small buffer for responsiveness without letting spam create weird paths
+    if (snakeDirQueue.length < 2) snakeDirQueue.push(next);
+
+    ev.preventDefault();
+}
+
+  function snakeTick(cells){
+    if (!snakeActive || snakeGameOver) return;
+
+    // Apply at most one queued direction change per movement tick
+    if (snakeDirQueue.length) snakeDir = snakeDirQueue.shift();
+
+    const headIdx = snake[0];
+    const headCol = Math.floor(headIdx / snakeRows);
+    const headRow = headIdx % snakeRows;
+
+    const nextCol = (headCol + snakeDir.dx + snakeCols) % snakeCols;
+    const nextRow = (headRow + snakeDir.dy + snakeRows) % snakeRows;
+    const nextIdx = nextCol * snakeRows + nextRow;
+
+    const tailIdx = snake[snake.length-1];
+    const willEat = (nextIdx === snakeTargetIdx);
+
+    // Self-collision (tail is allowed if it's moving away this tick)
+    if (snakeSet.has(nextIdx) && !(!willEat && nextIdx === tailIdx)){
+      snakeGameOver = true;
+      if (snakeTickTimer) clearInterval(snakeTickTimer);
+      snakeTickTimer = null;
+
+      snakeOverlay?.classList.add("gameover");
+      snakeCenterEl.textContent = "GAME OVER";
+      snakeSubEl.textContent = "Press R to restart, or QUIT.";
+      return;
+    }
+
+    const prevHead = snake[0];
+    // advance
+    snake.unshift(nextIdx);
+    snakeSet.add(nextIdx);
+
+    // visuals
+    const nextCell = cells[nextIdx];
+    if (nextCell) nextCell.classList.add("snake", "snake-head");
+    const prevHeadCell = cells[prevHead];
+    if (prevHeadCell) prevHeadCell.classList.remove("snake-head");
+
+    if (!willEat){
+      const removed = snake.pop();
+      snakeSet.delete(removed);
+      const removedCell = cells[removed];
+      if (removedCell) removedCell.classList.remove("snake", "snake-head");
+    } else {
+      snakeScore += 1;
+      updateSnakeScoreUI();
+      if (snakeTargetEl && snakeTargetEl.parentNode) snakeTargetEl.parentNode.removeChild(snakeTargetEl);
+      snakeTargetEl = null;
+      placeSnakeTarget(cells);
+    }
+  }
+
+  function startSnakeGame(){
+    const now = new Date();
+    const curYear = now.getFullYear();
+    if (Number(state.viewYear) !== curYear){
+      // Do not start in other years
+      stopSnakeGame();
+      return;
+    }
+
+    ensureSnakeOverlay();
+    showSnakeOverlay();
+    snakeOverlay.classList.add("playing");
+    snakeOverlay.classList.remove("gameover");
+
+    // (Re)build from the currently rendered grid
+    const cells = Array.from(hmGrid?.querySelectorAll(".hm-cell-btn") || []);
+    if (!cells.length){
+      stopSnakeGame();
+      return;
+    }
+
+    // clear any previous run
+    clearSnakeVisuals(cells);
+    if (snakeTickTimer) clearInterval(snakeTickTimer);
+    snakeTickTimer = null;
+
+    snakeCols = parseInt(hmGrid?.dataset?.cols || "0", 10) || Math.ceil(cells.length / 7);
+    snakeRows = 7;
+    snakeDir = { dx: 1, dy: 0 };
+    snakeDirQueue = [];
+
+    const headIdx = cells.findIndex(c=>c.classList.contains("today"));
+    if (headIdx < 0){
+      stopSnakeGame();
+      return;
+    }
+
+    const streakLen = Math.min(Math.max(1, computeStreak()), 10);
+    const headCol = Math.floor(headIdx / snakeRows);
+    const headRow = headIdx % snakeRows;
+
+    snake = [];
+    for (let i=0;i<streakLen;i++){
+      snake.push(snakeIdxFromColRow(headCol - i, headRow));
+    }
+    snakeSet = new Set(snake);
+
+    // visuals
+    snake.forEach(idx=>cells[idx]?.classList.add("snake"));
+    cells[snake[0]]?.classList.add("snake-head");
+
+    snakeScore = 0;
+    snakeGameOver = false;
+    updateSnakeScoreUI();
+
+    // Hide center text while playing
+    snakeCenterEl.textContent = "";
+    snakeSubEl.textContent = "Use arrow keys / WASD. Wraps at edges. Esc = quit.";
+
+    placeSnakeTarget(cells);
+
+    snakeCountdownActive = false;
+    snakeActive = true;
+
+    document.addEventListener("keydown", onSnakeKey, true);
+
+    const speed = 140; // ms
+    snakeTickTimer = setInterval(()=>snakeTick(cells), speed);
+  }
+
+  function stopSnakeGame(){
+    // cancel any pending holds/countdown
+    if (snakeHoldTimer) clearTimeout(snakeHoldTimer);
+    snakeHoldTimer = null;
+
+    if (snakeCountdownTimer) clearInterval(snakeCountdownTimer);
+    snakeCountdownTimer = null;
+
+    if (snakeTickTimer) clearInterval(snakeTickTimer);
+    snakeTickTimer = null;
+
+    snakeActive = false;
+    snakeCountdownActive = false;
+    snakeGameOver = false;
+
+    document.removeEventListener("keydown", onSnakeKey, true);
+
+    const cells = Array.from(hmGrid?.querySelectorAll(".hm-cell-btn") || []);
+    if (cells.length) clearSnakeVisuals(cells);
+
+    hideSnakeOverlay();
+    startGoalCycleIfNeeded();
+  }
 
   function applyStatsUI(){
     hmShowFirstVisit.checked = !!state.showFirstVisit;
@@ -268,11 +627,20 @@ function startGoalEmojiCycler(){
     const totalCells = shift + totalDays;
     const cols = Math.ceil(totalCells / 7);
 
+    // Expose current grid geometry for the snake game
+    if (hmGrid){
+      hmGrid.dataset.year = String(year);
+      hmGrid.dataset.cols = String(cols);
+      hmGrid.dataset.rows = "7";
+    }
+
     fitHeatmapToWidth(cols);
     hmYearLabel.textContent = String(year);
 
     hmGrid.innerHTML = "";
-    const todayYMD = Utils.dateToYMD(new Date());
+    const now = new Date();
+    const todayYMD = Utils.dateToYMD(now);
+    const curYearForSnake = now.getFullYear();
 
     buildMonthLabels(year, shift, cols);
 
@@ -287,6 +655,7 @@ function startGoalEmojiCycler(){
 
         if (dayOffset < 0 || dayOffset >= totalDays){
           btn.classList.add("out");
+          btn.dataset.inyear = "0";
           btn.tabIndex = -1;
           hmGrid.appendChild(btn);
           continue;
@@ -294,6 +663,8 @@ function startGoalEmojiCycler(){
 
         const d = new Date(year,0,1 + dayOffset);
         const ymd = Utils.dateToYMD(d);
+        btn.dataset.inyear = "1";
+        btn.dataset.ymd = ymd;
 
         const visited = !!state.visitedDays[ymd];
         if (visited) btn.classList.add("visited");
@@ -321,6 +692,9 @@ function startGoalEmojiCycler(){
 
         btn.addEventListener("click",(ev)=>{
           ev.stopPropagation();
+          // prevent toggles during the snake mini-game, and suppress the post-hold click
+          if (snakeActive || snakeCountdownActive || Date.now() < suppressClicksUntil) return;
+
           if (state.visitedDays[ymd]) delete state.visitedDays[ymd];
           else state.visitedDays[ymd] = true;
           save();
@@ -329,9 +703,37 @@ function startGoalEmojiCycler(){
         });
 
         btn.addEventListener("mousemove",(ev)=>{
+          if (snakeActive || snakeCountdownActive) return;
           Tooltip.show(tooltipTextForDay(d, ymd), ev.clientX, ev.clientY);
         });
-        btn.addEventListener("mouseleave", Tooltip.hide);
+        btn.addEventListener("mouseleave", ()=>{
+          if (snakeActive || snakeCountdownActive) return;
+          Tooltip.hide();
+        });
+
+        // Snake easter egg: hold left click on today's cell for 5 seconds
+        if (year === curYearForSnake && ymd === todayYMD){
+          const cancelHold = ()=>{
+            if (snakeHoldTimer) clearTimeout(snakeHoldTimer);
+            snakeHoldTimer = null;
+          };
+
+          btn.addEventListener("pointerdown", (ev)=>{
+            if (ev.button !== 0) return;
+            if (snakeActive || snakeCountdownActive) return;
+            cancelHold();
+            try { btn.setPointerCapture(ev.pointerId); } catch {}
+            snakeHoldTimer = setTimeout(()=>{
+              snakeHoldTimer = null;
+              suppressClicksUntil = Date.now() + 1500;
+              startSnakeCountdown();
+            }, 5000);
+          }, { passive:true });
+
+          btn.addEventListener("pointerup", cancelHold);
+          btn.addEventListener("pointercancel", cancelHold);
+          btn.addEventListener("pointerleave", cancelHold);
+        }
 
         hmGrid.appendChild(btn);
       }
@@ -579,12 +981,26 @@ function startGoalEmojiCycler(){
     hmShowTotal.addEventListener("change", ()=>{ state.showTotal = !!hmShowTotal.checked; save(); applyStatsUI(); });
     hmShowMonthTitles.addEventListener("change", ()=>{ state.showMonthTitles = !!hmShowMonthTitles.checked; save(); render(); });
 
-    hmPrevYearBtn.addEventListener("click", ()=>{ state.viewYear = Number(state.viewYear) - 1; save(); render(); });
-    hmNextYearBtn.addEventListener("click", ()=>{ state.viewYear = Number(state.viewYear) + 1; save(); render(); });
+    hmPrevYearBtn.addEventListener("click", ()=>{
+      if (snakeActive || snakeCountdownActive) return;
+      state.viewYear = Number(state.viewYear) - 1;
+      save();
+      render();
+    });
+    hmNextYearBtn.addEventListener("click", ()=>{
+      if (snakeActive || snakeCountdownActive) return;
+      state.viewYear = Number(state.viewYear) + 1;
+      save();
+      render();
+    });
 
     addGoalBtn.addEventListener("click", ()=>openGoalEditor(null));
 
-    window.addEventListener("resize", ()=>{ if (state.visible) render(); });
+    window.addEventListener("resize", ()=>{
+      if (!state.visible) return;
+      if (snakeActive || snakeCountdownActive) return;
+      render();
+    });
   };
 
   window.App.Heatmap = Heatmap;
