@@ -663,6 +663,47 @@ body.no-scores .score-wrap{display:none !important;}
   font-size: calc(var(--hm-cell) * 0.95);
   filter: drop-shadow(0 2px 6px rgba(0,0,0,.75));
 }
+
+/* Snake: dim studied days + hide goal markers while playing */
+.hm-grid.snake-running .hm-cell-btn.visited{opacity:.15}
+.hm-grid.snake-running .hm-cell-btn.snake{opacity:1}
+.hm-grid.snake-running .hm-cell-btn.snake-target-cell{opacity:1}
+.hm-grid.snake-running .hm-goal{display:none}
+
+/* Snake: eat pop + rainbow celebration */
+.hm-cell-btn.snake-eat{animation:hmSnakeEatPulse 320ms ease-out}
+@keyframes hmSnakeEatPulse{
+  0%{transform:scale(1); box-shadow:0 0 0 2px rgba(56,189,248,.22), 0 0 18px rgba(56,189,248,.12)}
+  45%{transform:scale(1.08); box-shadow:0 0 0 3px rgba(56,189,248,.32), 0 0 26px rgba(56,189,248,.18)}
+  100%{transform:scale(1); box-shadow:0 0 0 2px rgba(56,189,248,.22), 0 0 18px rgba(56,189,248,.12)}
+}
+.hm-snake-pop{
+  position:absolute;
+  left:50%; top:50%;
+  transform:translate(-50%,-50%);
+  pointer-events:none;
+  line-height:1;
+  font-size: calc(var(--hm-cell) * 1.05);
+  filter: drop-shadow(0 2px 10px rgba(0,0,0,.75));
+  animation:hmSnakePop 520ms ease-out forwards;
+}
+@keyframes hmSnakePop{
+  0%{opacity:0; transform:translate(-50%,-50%) scale(.65)}
+  25%{opacity:1; transform:translate(-50%,-60%) scale(1.15)}
+  100%{opacity:0; transform:translate(-50%,-95%) scale(.9)}
+}
+.hm-cell-btn.snake.snake-rainbow{
+  outline-color: hsl(var(--snake-hue-base), 90%, 62%);
+  box-shadow: 0 0 0 2px hsla(var(--snake-hue-base), 90%, 62%, .18);
+  animation:hmSnakeRainbowHue .85s linear infinite;
+}
+.hm-cell-btn.snake-head.snake-rainbow{
+  box-shadow:0 0 0 3px hsla(var(--snake-hue-base), 90%, 62%, .28), 0 0 22px hsla(var(--snake-hue-base), 90%, 62%, .18);
+}
+@keyframes hmSnakeRainbowHue{
+  from{filter:hue-rotate(0deg)}
+  to{filter:hue-rotate(360deg)}
+}
 .hm-snake-backdrop{
   position:fixed;
   inset:0;
@@ -678,6 +719,18 @@ body.no-scores .score-wrap{display:none !important;}
   z-index:100;
   pointer-events:none;
 }
+
+/* Snake win fireworks canvas */
+.hm-snake-fireworks{
+  position:fixed;
+  inset:0;
+  width:100vw;
+  height:100vh;
+  pointer-events:none;
+  opacity:0;
+  transition:opacity 240ms ease-out;
+}
+.hm-snake-overlay.win .hm-snake-fireworks{opacity:1}
 
 /* Keep the Study Log crisp while the snake blur backdrop is active */
 body.snake-mode #heatmapPanel{
@@ -1832,6 +1885,25 @@ body.invaders-mode .invaders-definition{
   top:50%;
   transform:translate(-50%, -50%);
   max-width:min(920px, 88vw);
+}
+
+/* Mini-game question prompt layout */
+.invaders-definition .mini-q-jp{
+  font-weight:900;
+  font-size:1.25rem;
+  line-height:1.35;
+}
+.invaders-definition .mini-q-en{
+  margin-top:.45rem;
+  font-weight:650;
+  font-size:1rem;
+  line-height:1.35;
+  opacity:.95;
+}
+.invaders-definition .jlptfiver-missing{
+  font-weight:900;
+  letter-spacing:.12em;
+  opacity:.85;
 }
 
 /* Flashcard shown after a correct hit */

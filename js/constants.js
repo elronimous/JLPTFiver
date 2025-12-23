@@ -19,6 +19,7 @@
       USERDATA: "jlpt-user-data",
       SETTINGS: "jlpt-global-settings",
       HEATMAP: "jlpt-heatmap-state",
+      UI_EXTRAS: "jlpt-ui-extras",
       CRAM_LISTS: "jlpt-cram-custom-lists",
       CRAM_SESSION: "jlpt-cram-session"
     },

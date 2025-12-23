@@ -18,10 +18,16 @@
   }
 
   // UI state
+  const uiExtras = loadJSON(CONST.STORAGE_KEYS.UI_EXTRAS, {});
   Storage.ui = {
     filters: loadJSON(CONST.STORAGE_KEYS.FILTERS, {ALL:true,N5:true,N4:true,N3:true,N2:true,N1:true}),
     expanded: loadJSON(CONST.STORAGE_KEYS.EXPANDED, {N5:true,N4:true,N3:true,N2:true,N1:true}),
-    cramLists: loadJSON(CONST.STORAGE_KEYS.CRAM_LISTS, {})
+    cramLists: loadJSON(CONST.STORAGE_KEYS.CRAM_LISTS, {}),
+    // Snake mini-game (Study Log Easter egg)
+    snakeHiScore: (Number.isFinite(Number(uiExtras?.snakeHiScore)) ? Math.max(0, Math.floor(Number(uiExtras.snakeHiScore))) : 0),
+    // Mini games (Invaders / Asteroids)
+    invadersHiScore: (Number.isFinite(Number(uiExtras?.invadersHiScore)) ? Math.max(0, Math.floor(Number(uiExtras.invadersHiScore))) : 0),
+    asteroidsHiScore: (Number.isFinite(Number(uiExtras?.asteroidsHiScore)) ? Math.max(0, Math.floor(Number(uiExtras.asteroidsHiScore))) : 0)
   };
 
   // Settings
@@ -132,6 +138,10 @@
         return true;
       });
     });
+
+    // Snake hi-score (UI)
+    const hs = Number(Storage.ui.snakeHiScore);
+    Storage.ui.snakeHiScore = (Number.isFinite(hs) ? Math.max(0, Math.floor(hs)) : 0);
   }
   migrate();
 
@@ -139,6 +149,7 @@
     saveJSON(CONST.STORAGE_KEYS.FILTERS, Storage.ui.filters);
     saveJSON(CONST.STORAGE_KEYS.EXPANDED, Storage.ui.expanded);
     saveJSON(CONST.STORAGE_KEYS.CRAM_LISTS, Storage.ui.cramLists);
+    saveJSON(CONST.STORAGE_KEYS.UI_EXTRAS, { snakeHiScore: Storage.ui.snakeHiScore, invadersHiScore: Storage.ui.invadersHiScore, asteroidsHiScore: Storage.ui.asteroidsHiScore });
   };
 
   Storage.saveSettings = () => saveJSON(CONST.STORAGE_KEYS.SETTINGS, Storage.settings);
@@ -171,6 +182,9 @@
       if (parsed.ui.filters) Storage.ui.filters = parsed.ui.filters;
       if (parsed.ui.expanded) Storage.ui.expanded = parsed.ui.expanded;
       if (parsed.ui.cramLists) Storage.ui.cramLists = parsed.ui.cramLists;
+      if (parsed.ui.snakeHiScore !== undefined) Storage.ui.snakeHiScore = parsed.ui.snakeHiScore;
+      if (parsed.ui.invadersHiScore !== undefined) Storage.ui.invadersHiScore = parsed.ui.invadersHiScore;
+      if (parsed.ui.asteroidsHiScore !== undefined) Storage.ui.asteroidsHiScore = parsed.ui.asteroidsHiScore;
     }
 
     migrate();
@@ -215,7 +229,10 @@
     const ui = parsed.ui || srcUser.ui || {
       filters: parsed.filters || srcUser.filters,
       expanded: parsed.expanded || srcUser.expanded,
-      cramLists: parsed.cramLists || srcUser.cramLists
+      cramLists: parsed.cramLists || srcUser.cramLists,
+      snakeHiScore: parsed.snakeHiScore || srcUser.snakeHiScore,
+      invadersHiScore: parsed.invadersHiScore || srcUser.invadersHiScore,
+      asteroidsHiScore: parsed.asteroidsHiScore || srcUser.asteroidsHiScore
     };
     if (ui && typeof ui === "object") out.ui = ui;
 
@@ -234,7 +251,7 @@
       hasScores: isObj(n.scoresByExample),
       hasSrs: isObj(n.srs),
       hasSettings: isObj(n.settings),
-      hasUi: isObj(n.ui) && (isObj(n.ui.filters) || isObj(n.ui.expanded)),
+      hasUi: isObj(n.ui) && (isObj(n.ui.filters) || isObj(n.ui.expanded) || isObj(n.ui.cramLists) || Number.isFinite(Number(n.ui.snakeHiScore)) || Number.isFinite(Number(n.ui.invadersHiScore)) || Number.isFinite(Number(n.ui.asteroidsHiScore))),
       hasCramLists: isObj(n.ui) && isObj(n.ui.cramLists),
       hasHeatmap: isObj(n.heatmap)
     };
@@ -403,6 +420,16 @@
       if (n.ui.expanded && typeof n.ui.expanded === "object"){
         if (mode === "overwrite") Storage.ui.expanded = n.ui.expanded;
         else mergeObjectAddMissing(Storage.ui.expanded, n.ui.expanded);
+      }
+
+      // Snake mini-game hi score (keep the highest score in merge mode)
+      if (n.ui.snakeHiScore !== null && n.ui.snakeHiScore !== undefined){
+        const incoming = Number(n.ui.snakeHiScore);
+        if (Number.isFinite(incoming)){
+          const inc = Math.max(0, Math.floor(incoming));
+          if (mode === "overwrite") Storage.ui.snakeHiScore = inc;
+          else Storage.ui.snakeHiScore = Math.max(Number(Storage.ui.snakeHiScore) || 0, inc);
+        }
       }
     }
     if (include.cramLists && n.ui && n.ui.cramLists){

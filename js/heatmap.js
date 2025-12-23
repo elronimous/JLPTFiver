@@ -27,14 +27,30 @@
   let snakeBackdrop = null;
   let snakeQuitBtn = null;
   let snakeScoreEl = null;
+  let snakeScoreCurEl = null;
+  let snakeScoreHiEl = null;
   let snakeCenterEl = null;
   let snakeSubEl = null;
+  let snakeFireCanvas = null;
+  let snakeFireCtx = null;
+
+  // Rainbow should follow the snake as it moves
+  let snakeRainbowUntil = 0;
+  let snakeRainbowApplied = new Set();
+
+  // Win fireworks
+  let snakeFireActive = false;
+  let snakeFireRaf = null;
+  let snakeFireLastTs = 0;
+  let snakeFireRockets = [];
+  let snakeFireSparks = [];
 
   let snakeActive = false;
   let snakeCountdownActive = false;
   let snakeHoldTimer = null;
   let snakeCountdownTimer = null;
   let snakeTickTimer = null;
+  let snakeRainbowTimer = null;
   let suppressClicksUntil = 0;
 
   let snake = [];            // indices into hmGrid children, [head, ...]
@@ -45,6 +61,7 @@
   let snakeRows = 7;
   let snakeTargetIdx = -1;
   let snakeTargetEl = null;
+  let snakeTargetCellIdx = -1;
   let snakeScore = 0;
   let snakeGameOver = false;
 
@@ -190,7 +207,8 @@ function startGoalEmojiCycler(){
   snakeOverlay.hidden = true;
   snakeOverlay.innerHTML = `
     <button type="button" class="chip-btn hm-snake-quit">QUIT</button>
-    <div class="hm-snake-score">Score: 0</div>
+    <div class="hm-snake-score">Score: <span class="hm-snake-score-cur">0</span> · Hi: <span class="hm-snake-score-hi">0</span></div>
+    <canvas class="hm-snake-fireworks" width="1" height="1" aria-hidden="true"></canvas>
     <div class="hm-snake-center" aria-live="polite">
       <div class="hm-snake-center-main">3</div>
       <div class="hm-snake-center-sub"></div>
@@ -200,6 +218,10 @@ function startGoalEmojiCycler(){
   document.body.appendChild(snakeOverlay);
   snakeQuitBtn = snakeOverlay.querySelector(".hm-snake-quit");
   snakeScoreEl = snakeOverlay.querySelector(".hm-snake-score");
+  snakeScoreCurEl = snakeOverlay.querySelector(".hm-snake-score-cur");
+  snakeScoreHiEl = snakeOverlay.querySelector(".hm-snake-score-hi");
+  snakeFireCanvas = snakeOverlay.querySelector(".hm-snake-fireworks");
+  snakeFireCtx = null;
   snakeCenterEl = snakeOverlay.querySelector(".hm-snake-center-main");
   snakeSubEl = snakeOverlay.querySelector(".hm-snake-center-sub");
 
@@ -210,22 +232,202 @@ function startGoalEmojiCycler(){
   function showSnakeOverlay(){
     ensureSnakeOverlay();
     document.body.classList.add("snake-mode");
+    // Dim studied days + hide goals while snake is running/counting down.
+    try { hmGrid?.classList.add("snake-running"); } catch {}
     if (snakeBackdrop) snakeBackdrop.hidden = false;
     if (snakeOverlay) snakeOverlay.hidden = false;
   }
 
   function hideSnakeOverlay(){
     document.body.classList.remove("snake-mode");
+    try { hmGrid?.classList.remove("snake-running"); } catch {}
     if (snakeBackdrop) snakeBackdrop.hidden = true;
     if (!snakeOverlay) return;
     snakeOverlay.hidden = true;
     snakeOverlay.classList.remove("playing");
     snakeOverlay.classList.remove("gameover");
+    snakeOverlay.classList.remove("win");
   }
 
   function updateSnakeScoreUI(){
-    if (!snakeScoreEl) return;
-    snakeScoreEl.textContent = `Score: ${snakeScore}`;
+    const cur = Math.max(0, Math.floor(Number(snakeScore) || 0));
+    let hi = Number(Storage?.ui?.snakeHiScore);
+    hi = Number.isFinite(hi) ? Math.max(0, Math.floor(hi)) : 0;
+
+    if (cur > hi){
+      hi = cur;
+      if (Storage && Storage.ui){
+        Storage.ui.snakeHiScore = hi;
+        Storage.saveUi?.();
+      }
+    }
+
+    if (snakeScoreCurEl) snakeScoreCurEl.textContent = String(cur);
+    if (snakeScoreHiEl) snakeScoreHiEl.textContent = String(hi);
+
+    // Fallback for older DOM shapes (just in case)
+    if (!snakeScoreCurEl || !snakeScoreHiEl){
+      if (snakeScoreEl) snakeScoreEl.textContent = `Score: ${cur} · Hi: ${hi}`;
+    }
+  }
+
+  function applySnakeRainbow(cells){
+    if (!cells || !cells.length) return;
+    const now = Date.now();
+
+    const active = (snakeRainbowUntil && now < snakeRainbowUntil);
+    if (!active){
+      if (snakeRainbowApplied.size){
+        snakeRainbowApplied.forEach(idx=>{ try{ cells[idx]?.classList.remove("snake-rainbow"); }catch{} });
+        snakeRainbowApplied.clear();
+      }
+      snakeRainbowUntil = 0;
+      return;
+    }
+
+    // Add rainbow to all current snake segments (including head as it moves)
+    for (let i=0;i<snake.length;i++){
+      const idx = snake[i];
+      if (snakeRainbowApplied.has(idx)) continue;
+      try{ cells[idx]?.classList.add("snake-rainbow"); }catch{}
+      snakeRainbowApplied.add(idx);
+    }
+
+    // Remove rainbow from segments that have moved off the body
+    for (const idx of Array.from(snakeRainbowApplied)){
+      if (snakeSet.has(idx)) continue;
+      try{ cells[idx]?.classList.remove("snake-rainbow"); }catch{}
+      snakeRainbowApplied.delete(idx);
+    }
+  }
+
+  function snakeFireResize(){
+    if (!snakeFireCanvas) return;
+    const dpr = Math.max(1, Math.min(2, window.devicePixelRatio || 1));
+    const w = Math.max(1, window.innerWidth);
+    const h = Math.max(1, window.innerHeight);
+    snakeFireCanvas.width = Math.floor(w * dpr);
+    snakeFireCanvas.height = Math.floor(h * dpr);
+    snakeFireCanvas.style.width = w + "px";
+    snakeFireCanvas.style.height = h + "px";
+    if (!snakeFireCtx){
+      try{ snakeFireCtx = snakeFireCanvas.getContext("2d"); }catch{ snakeFireCtx = null; }
+    }
+    if (snakeFireCtx) snakeFireCtx.setTransform(dpr,0,0,dpr,0,0);
+  }
+
+  function stopSnakeFireworks(){
+    snakeFireActive = false;
+    if (snakeFireRaf) cancelAnimationFrame(snakeFireRaf);
+    snakeFireRaf = null;
+    snakeFireLastTs = 0;
+    snakeFireRockets = [];
+    snakeFireSparks = [];
+    try{ window.removeEventListener("resize", snakeFireResize); }catch{}
+    try{ if (snakeFireCtx) snakeFireCtx.clearRect(0,0,window.innerWidth,window.innerHeight); }catch{}
+  }
+
+  function startSnakeFireworks(){
+    ensureSnakeOverlay();
+    if (!snakeFireCanvas) return;
+    snakeFireResize();
+    if (!snakeFireCtx) return;
+
+    stopSnakeFireworks();
+    snakeFireActive = true;
+
+    try{ window.addEventListener("resize", snakeFireResize); }catch{}
+
+    // kick off a few rockets immediately
+    for (let i=0;i<3;i++) snakeFireRockets.push(makeSnakeRocket(true));
+
+    snakeFireRaf = requestAnimationFrame(snakeFireTick);
+  }
+
+  function makeSnakeRocket(burst){
+    const w = Math.max(1, window.innerWidth);
+    const h = Math.max(1, window.innerHeight);
+    const x = Math.random() * w;
+    const y = h + 10;
+    const vx = (Math.random()-0.5) * 40;
+    const vy = -(320 + Math.random()*260);
+    const hue = Math.floor(Math.random()*360);
+    const apex = (h*0.18) + Math.random()*(h*0.35);
+    return { x, y, vx, vy, hue, apex, ttl: burst ? 1.8 : 2.6 };
+  }
+
+  function explodeSnakeRocket(r){
+    const n = 26 + Math.floor(Math.random()*24);
+    for (let i=0;i<n;i++){
+      const a = Math.random() * Math.PI * 2;
+      const sp = 60 + Math.random()*220;
+      const vx = Math.cos(a) * sp;
+      const vy = Math.sin(a) * sp;
+      const life = 0.9 + Math.random()*0.9;
+      snakeFireSparks.push({ x:r.x, y:r.y, vx, vy, hue:r.hue, life, max:life });
+    }
+  }
+
+  function snakeFireTick(ts){
+    if (!snakeFireActive || !snakeFireCtx){ return; }
+    if (!snakeFireLastTs) snakeFireLastTs = ts;
+    const dt = Math.min(0.033, (ts - snakeFireLastTs) / 1000);
+    snakeFireLastTs = ts;
+
+    const w = Math.max(1, window.innerWidth);
+    const h = Math.max(1, window.innerHeight);
+
+    // soft fade for trails
+    snakeFireCtx.fillStyle = "rgba(2,6,23,0.18)";
+    snakeFireCtx.fillRect(0,0,w,h);
+
+    // spawn new rockets
+    if (snakeFireRockets.length < 6 && Math.random() < 0.10) snakeFireRockets.push(makeSnakeRocket(false));
+
+    const g = 520; // gravity px/s^2
+
+    // update rockets
+    for (let i=snakeFireRockets.length-1;i>=0;i--){
+      const r = snakeFireRockets[i];
+      r.ttl -= dt;
+      r.vy += g * dt * 0.12;
+      r.x += r.vx * dt;
+      r.y += r.vy * dt;
+
+      // draw rocket
+      snakeFireCtx.globalAlpha = 0.95;
+      snakeFireCtx.fillStyle = `hsl(${r.hue},100%,70%)`;
+      snakeFireCtx.beginPath();
+      snakeFireCtx.arc(r.x, r.y, 2.2, 0, Math.PI*2);
+      snakeFireCtx.fill();
+
+      if (r.y <= r.apex || r.ttl <= 0){
+        explodeSnakeRocket(r);
+        snakeFireRockets.splice(i,1);
+      }
+    }
+
+    // update sparks
+    for (let i=snakeFireSparks.length-1;i>=0;i--){
+      const p = snakeFireSparks[i];
+      p.life -= dt;
+      if (p.life <= 0){ snakeFireSparks.splice(i,1); continue; }
+      p.vy += g * dt * 0.55;
+      p.x += p.vx * dt;
+      p.y += p.vy * dt;
+      p.vx *= 0.985;
+      p.vy *= 0.985;
+
+      const a = Math.max(0, Math.min(1, p.life / p.max));
+      snakeFireCtx.globalAlpha = a;
+      snakeFireCtx.fillStyle = `hsl(${p.hue},100%,65%)`;
+      snakeFireCtx.beginPath();
+      snakeFireCtx.arc(p.x, p.y, 1.9, 0, Math.PI*2);
+      snakeFireCtx.fill();
+    }
+
+    snakeFireCtx.globalAlpha = 1;
+    snakeFireRaf = requestAnimationFrame(snakeFireTick);
   }
 
   function snakeIdxFromColRow(col, row){
@@ -246,12 +448,23 @@ function startGoalEmojiCycler(){
     if (snakeTargetEl && snakeTargetEl.parentNode) snakeTargetEl.parentNode.removeChild(snakeTargetEl);
     snakeTargetEl = null;
     snakeTargetIdx = -1;
+
+    // Clear target cell marker
+    if (snakeTargetCellIdx >= 0 && cells[snakeTargetCellIdx]){
+      cells[snakeTargetCellIdx].classList.remove("snake-target-cell");
+    }
+    snakeTargetCellIdx = -1;
   }
 
   function placeSnakeTarget(cells){
     if (snakeTargetEl && snakeTargetEl.parentNode) snakeTargetEl.parentNode.removeChild(snakeTargetEl);
     snakeTargetEl = null;
     snakeTargetIdx = -1;
+
+    if (snakeTargetCellIdx >= 0 && cells[snakeTargetCellIdx]){
+      cells[snakeTargetCellIdx].classList.remove("snake-target-cell");
+    }
+    snakeTargetCellIdx = -1;
 
     const inYear = [];
     for (let i=0;i<cells.length;i++){
@@ -269,10 +482,51 @@ function startGoalEmojiCycler(){
     }
 
     snakeTargetIdx = candidates[Math.floor(Math.random() * candidates.length)];
+    snakeTargetCellIdx = snakeTargetIdx;
     snakeTargetEl = document.createElement("div");
     snakeTargetEl.className = "hm-snake-target";
     snakeTargetEl.textContent = SNAKE_TARGET_EMOJIS[Math.floor(Math.random() * SNAKE_TARGET_EMOJIS.length)];
+    try { cells[snakeTargetIdx]?.classList.add("snake-target-cell"); } catch {}
     cells[snakeTargetIdx].appendChild(snakeTargetEl);
+  }
+
+  function snakeEatPop(cell){
+    if (!cell) return;
+
+    // Head pulse
+    try {
+      cell.classList.add("snake-eat");
+      setTimeout(()=>{ try{ cell.classList.remove("snake-eat"); } catch{} }, 340);
+    } catch {}
+
+    // Sparkle pop
+    try {
+      const pop = document.createElement("div");
+      pop.className = "hm-snake-pop";
+      pop.textContent = "✨";
+      cell.appendChild(pop);
+      setTimeout(()=>{ try{ pop.remove(); } catch{} }, 650);
+    } catch {}
+  }
+
+  function triggerSnakeRainbow(cells){
+    if (!cells || !cells.length) return;
+    if (snakeRainbowTimer) clearTimeout(snakeRainbowTimer);
+    snakeRainbowTimer = null;
+
+    // Randomise base hue each celebration
+    try{ hmGrid?.style?.setProperty("--snake-hue-base", String(Math.floor(Math.random()*360))); }catch{}
+
+    // Mark rainbow active for a short window; applied each tick so it follows the moving head
+    snakeRainbowUntil = Date.now() + 2000;
+    applySnakeRainbow(cells);
+
+    // Ensure it clears even if the game stops (eg win/gameover) during the effect
+    snakeRainbowTimer = setTimeout(()=>{
+      snakeRainbowUntil = 0;
+      applySnakeRainbow(cells);
+      snakeRainbowTimer = null;
+    }, 2000);
   }
 
   function startSnakeCountdown(){
@@ -288,7 +542,7 @@ function startGoalEmojiCycler(){
 
     snakeCountdownActive = true;
     snakeGameOver = false;
-    snakeScore = 0;
+    snakeScore = Math.min(Math.max(1, computeStreak()), 50);
     updateSnakeScoreUI();
 
     showSnakeOverlay();
@@ -402,10 +656,38 @@ function startGoalEmojiCycler(){
     } else {
       snakeScore += 1;
       updateSnakeScoreUI();
+
+      // Fun feedback
+      snakeEatPop(nextCell);
+      if (snakeScore % 10 === 0) triggerSnakeRainbow(cells);
+
+      // If the player fills the entire board, celebrate and end the game
+      if (snake.length >= cells.length){
+        snakeGameOver = true;
+        snakeActive = false;
+        if (snakeTickTimer) clearInterval(snakeTickTimer);
+        snakeTickTimer = null;
+
+        // Remove remaining target if any
+        try{ if (snakeTargetEl && snakeTargetEl.parentNode) snakeTargetEl.parentNode.removeChild(snakeTargetEl); }catch{}
+        snakeTargetEl = null;
+        snakeTargetIdx = -1;
+
+        snakeOverlay?.classList.add("win");
+        snakeOverlay?.classList.add("gameover");
+        snakeCenterEl.textContent = "CONGRATULATIONS!";
+        snakeSubEl.textContent = "You filled every square. Press R to play again, or QUIT.";
+        startSnakeFireworks();
+        return;
+      }
+
       if (snakeTargetEl && snakeTargetEl.parentNode) snakeTargetEl.parentNode.removeChild(snakeTargetEl);
       snakeTargetEl = null;
       placeSnakeTarget(cells);
     }
+
+    // Keep rainbow effect on the whole body as it moves (including head)
+    if (snakeRainbowUntil || snakeRainbowApplied.size) applySnakeRainbow(cells);
   }
 
   function startSnakeGame(){
@@ -421,6 +703,8 @@ function startGoalEmojiCycler(){
     showSnakeOverlay();
     snakeOverlay.classList.add("playing");
     snakeOverlay.classList.remove("gameover");
+    snakeOverlay.classList.remove("win");
+    stopSnakeFireworks();
 
     // (Re)build from the currently rendered grid
     const cells = Array.from(hmGrid?.querySelectorAll(".hm-cell-btn") || []);
@@ -445,9 +729,11 @@ function startGoalEmojiCycler(){
       return;
     }
 
-    const streakLen = Math.min(Math.max(1, computeStreak()), 10);
     const headCol = Math.floor(headIdx / snakeRows);
     const headRow = headIdx % snakeRows;
+
+    const maxLen = Math.min(50, headCol + 1);
+    const streakLen = Math.min(Math.max(1, computeStreak()), maxLen);
 
     snake = [];
     for (let i=0;i<streakLen;i++){
@@ -459,13 +745,13 @@ function startGoalEmojiCycler(){
     snake.forEach(idx=>cells[idx]?.classList.add("snake"));
     cells[snake[0]]?.classList.add("snake-head");
 
-    snakeScore = 0;
+    snakeScore = streakLen;
     snakeGameOver = false;
     updateSnakeScoreUI();
 
     // Hide center text while playing
     snakeCenterEl.textContent = "";
-    snakeSubEl.textContent = "Use arrow keys / WASD. Wraps at edges. Esc = quit.";
+    snakeSubEl.textContent = "";
 
     placeSnakeTarget(cells);
 
@@ -489,13 +775,20 @@ function startGoalEmojiCycler(){
     if (snakeTickTimer) clearInterval(snakeTickTimer);
     snakeTickTimer = null;
 
+    if (snakeRainbowTimer) clearTimeout(snakeRainbowTimer);
+    snakeRainbowTimer = null;
+
+	  stopSnakeFireworks();
+	  snakeRainbowUntil = 0;
+
     snakeActive = false;
     snakeCountdownActive = false;
     snakeGameOver = false;
 
     document.removeEventListener("keydown", onSnakeKey, true);
 
-    const cells = Array.from(hmGrid?.querySelectorAll(".hm-cell-btn") || []);
+	  const cells = Array.from(hmGrid?.querySelectorAll(".hm-cell-btn") || []);
+	  if (cells.length) applySnakeRainbow(cells);
     if (cells.length) clearSnakeVisuals(cells);
 
     hideSnakeOverlay();

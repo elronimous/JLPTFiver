@@ -369,6 +369,9 @@
         if (exUi.checked){
           payload.ui.filters = Storage.ui.filters;
           payload.ui.expanded = Storage.ui.expanded;
+          payload.ui.snakeHiScore = Storage.ui.snakeHiScore;
+          payload.ui.invadersHiScore = Storage.ui.invadersHiScore;
+          payload.ui.asteroidsHiScore = Storage.ui.asteroidsHiScore;
         }
         if (exCramLists.checked){
           payload.ui.cramLists = Storage.ui.cramLists;
@@ -426,7 +429,17 @@
         parts.push(`SRS: ${gk} items / ${cards} cards`);
       }
       if (inspect.hasSettings) parts.push(`Settings: ${count(n.settings)} keys`);
-      if (inspect.hasUi) parts.push(`UI: ${count(n.ui?.filters)} filters / ${count(n.ui?.expanded)} expanded`);
+      if (inspect.hasUi){
+        const hsSnake = Number(n.ui?.snakeHiScore);
+        const hsInv = Number(n.ui?.invadersHiScore);
+        const hsAst = Number(n.ui?.asteroidsHiScore);
+        const extras = [];
+        if (Number.isFinite(hsSnake)) extras.push(`Snake hi: ${Math.max(0, Math.floor(hsSnake))}`);
+        if (Number.isFinite(hsInv)) extras.push(`Invaders hi: ${Math.max(0, Math.floor(hsInv))}`);
+        if (Number.isFinite(hsAst)) extras.push(`Asteroids hi: ${Math.max(0, Math.floor(hsAst))}`);
+        const hsTxt = extras.length ? ` / ${extras.join(" / ")}` : "";
+        parts.push(`UI: ${count(n.ui?.filters)} filters / ${count(n.ui?.expanded)} expanded${hsTxt}`);
+      }
       if (inspect.hasCramLists) parts.push(`Cram lists: ${count(n.ui?.cramLists)}`);
       if (inspect.hasHeatmap) parts.push(`Study Log: ${count(n.heatmap?.visitedDays)} days`);
       if (inspect.hasCramSession){
@@ -674,6 +687,9 @@
       if (delUi?.checked){
         Storage.ui.filters = { ALL:true, N5:true, N4:true, N3:true, N2:true, N1:true };
         Storage.ui.expanded = { N5:true, N4:true, N3:true, N2:true, N1:true };
+        Storage.ui.snakeHiScore = 0;
+        Storage.ui.invadersHiScore = 0;
+        Storage.ui.asteroidsHiScore = 0;
         Storage.saveUi();
       }
 
