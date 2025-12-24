@@ -461,6 +461,19 @@
         });
       }
 
+      // Day stats (SRS / CRAM) — only add missing days to avoid doubling.
+      out.dayStats = out.dayStats && typeof out.dayStats === "object" ? out.dayStats : {};
+      if (inc.dayStats && typeof inc.dayStats === "object"){
+        Object.keys(inc.dayStats).forEach(ymd=>{
+          if (out.dayStats[ymd] !== undefined) return;
+          const ds = inc.dayStats[ymd];
+          if (!ds || typeof ds !== "object") return;
+          // Deep copy to avoid reference sharing
+          try{ out.dayStats[ymd] = JSON.parse(JSON.stringify(ds)); }
+          catch(e){ out.dayStats[ymd] = ds; }
+        });
+      }
+
       out.goals = Array.isArray(out.goals) ? out.goals : [];
       const curIds = new Set(out.goals.map(g=>g && g.id).filter(Boolean));
       const curSig = new Set(out.goals.map(g=>`${g?.ymd||""}|||${g?.emoji||""}|||${g?.text||""}`));

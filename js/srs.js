@@ -463,7 +463,8 @@ return srs;
       showingBack,
       awaitingNext,
       answeredOnce: Array.from(answeredOnceThisSession || []).map(String),
-      reviewUndo: extra && extra.reviewUndo ? extra.reviewUndo : null
+      reviewUndo: extra && extra.reviewUndo ? extra.reviewUndo : null,
+      studyLogUndo: extra && extra.studyLogUndo ? extra.studyLogUndo : null
     };
   }
 
@@ -516,6 +517,14 @@ return srs;
 
     // Restore SRS card state first so badges/schedule reflect immediately.
     restoreReviewUndo(s.reviewUndo);
+
+    // Restore Study Log counters for the day.
+    try{ window.App?.Heatmap?.applyStudyUndo?.(s.studyLogUndo); }catch(e){}
+
+    // Revert Study Log totals (if present)
+    try{
+      window.App?.Heatmap?.applyStudyUndo?.(s.studyLogUndo);
+    }catch(e){}
 
     deck = (s.deck || []).map(c => {
       const out = { type: c.type, grammarKey: c.grammarKey, gp: c.gp };
@@ -1060,8 +1069,9 @@ if (showingBack && usableCount > 1){
     if (!deck.length || awaitingNext) return;
     const current = deck[0];
 
+    const studyLogUndo = window.App?.Heatmap?.recordSrsActivity?.({ grammarKey: current.grammarKey }) || null;
     const reviewUndo = !answeredOnceThisSession.has(current.grammarKey) ? makeReviewUndo(current.grammarKey) : null;
-    pushUndoSnapshot({ reviewUndo });
+    pushUndoSnapshot({ reviewUndo, studyLogUndo });
 
     // Score should only change once per grammar point, based on the first answer given.
     if (!answeredOnceThisSession.has(current.grammarKey)){
@@ -1090,8 +1100,9 @@ if (showingBack && usableCount > 1){
     if (!deck.length || awaitingNext) return;
     const current = deck[0];
 
+    const studyLogUndo = window.App?.Heatmap?.recordSrsActivity?.({ grammarKey: current.grammarKey }) || null;
     const reviewUndo = !answeredOnceThisSession.has(current.grammarKey) ? makeReviewUndo(current.grammarKey) : null;
-    pushUndoSnapshot({ reviewUndo });
+    pushUndoSnapshot({ reviewUndo, studyLogUndo });
 
     // Score should only change once per grammar point, based on the first answer given.
     if (!answeredOnceThisSession.has(current.grammarKey)){

@@ -1672,7 +1672,7 @@ cardEl.innerHTML = `
     return map;
   }
 
-  function snapshotForUndo(){
+  function snapshotForUndo(extra){
     return {
       deck: (deck || []).map(cloneDeckCardForUndo),
       wrongCount,
@@ -1681,7 +1681,8 @@ cardEl.innerHTML = `
       showingBack,
       awaitingNext,
       wrongGrammar: serializeWrongGrammarMap(),
-      wrongExampleIds: Array.from(wrongExampleIds || []).map(String)
+      wrongExampleIds: Array.from(wrongExampleIds || []).map(String),
+      studyLogUndo: extra && extra.studyLogUndo ? extra.studyLogUndo : null
     };
   }
 
@@ -1695,8 +1696,8 @@ cardEl.innerHTML = `
     undoBtn.disabled = !enabled;
   }
 
-  function pushUndoSnapshot(){
-    undoState = snapshotForUndo();
+  function pushUndoSnapshot(extra){
+    undoState = snapshotForUndo(extra);
     setUndoEnabled();
   }
 
@@ -1704,6 +1705,9 @@ cardEl.innerHTML = `
     if (!undoState) return;
     const s = undoState;
     undoState = null;
+
+    // Restore Study Log counters for the day.
+    try{ window.App?.Heatmap?.applyStudyUndo?.(s.studyLogUndo); }catch(e){}
 
     deck = (s.deck || []).map(c => {
       const out = {
@@ -1930,7 +1934,8 @@ if (showingBack && usableCount > 1){
     if (deck.length === 0) return;
     if (awaitingNext) return;
 
-    pushUndoSnapshot();
+    const studyLogUndo = window.App?.Heatmap?.recordCramActivity?.() || null;
+    pushUndoSnapshot({ studyLogUndo });
 
     // Step 1: reveal the back, then wait for NEXT to advance/reinsert.
     wrongCount++;
@@ -1958,7 +1963,8 @@ if (showingBack && usableCount > 1){
     if (deck.length === 0) return;
     if (awaitingNext) return;
 
-    pushUndoSnapshot();
+    const studyLogUndo = window.App?.Heatmap?.recordCramActivity?.() || null;
+    pushUndoSnapshot({ studyLogUndo });
     rightCount++;
     deck.shift();
     showingBack = false;

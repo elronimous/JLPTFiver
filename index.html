@@ -55,6 +55,9 @@
             <div class="hm-title">Study Log</div>
             <button id="openHeatmapSettingsBtn" class="settings-gear-btn" title="Study Log settings" style="padding:.18rem .55rem;font-size:.9rem">⚙</button>
           </div>
+          <div style="display:flex;align-items:center;gap:.4rem">
+            <button id="openHeatmapMonthlyBtn" class="chip-btn icon-only" title="Monthly study totals">📈</button>
+          </div>
         </div>
 
         <div class="hm-grid-wrap">
@@ -327,6 +330,51 @@
         <button id="hmAddGoalBtn" class="modal-btn primary" style="margin-top:.6rem">＋ Add new goal!</button>
 
         <div id="hmGoalEditor" class="hm-goal-editor" hidden></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Study Log monthly totals modal -->
+  <div id="heatmapMonthlyModalBackdrop" class="modal-backdrop" hidden>
+    <div class="modal modal-wide">
+      <div class="modal-header">
+        <div class="modal-title">Study Totals</div>
+        <button id="closeHeatmapMonthlyBtn" class="modal-close-btn" aria-label="Close">✕</button>
+      </div>
+      <div class="modal-body">
+        <div class="hm-monthly-wrap">
+          <div class="hm-monthly-left">
+            <div class="hm-monthly-left-title">All months</div>
+            <div id="hmMonthlyList" class="hm-monthly-list"></div>
+          </div>
+          <div class="hm-monthly-right">
+            <div class="hm-monthly-nav">
+              <button id="hmMonthlyPrevBtn" class="chip-btn icon-only" title="Previous month">‹</button>
+              <div id="hmMonthlyLabel" class="hm-monthly-label">—</div>
+              <button id="hmMonthlyNextBtn" class="chip-btn icon-only" title="Next month">›</button>
+            </div>
+            <div id="hmMonthlySummary" class="hm-monthly-summary">—</div>
+
+            <div id="hmMonthlyChartWrap" class="hm-monthly-chart-wrap">
+              <div class="hm-monthly-row">
+                <div class="hm-monthly-row-label">Grammar</div>
+                <div id="hmMonthlyBarsGrammar" class="hm-monthly-bars"></div>
+              </div>
+              <div class="hm-monthly-row">
+                <div class="hm-monthly-row-label">Sentences</div>
+                <div id="hmMonthlyBarsSentences" class="hm-monthly-bars"></div>
+              </div>
+              <div class="hm-monthly-row">
+                <div class="hm-monthly-row-label">Crammed</div>
+                <div id="hmMonthlyBarsCram" class="hm-monthly-bars"></div>
+              </div>
+            </div>
+
+            <div class="modal-hint" style="margin-top:.6rem">
+              Tip: hover a bar to see that day’s count.
+            </div>
+          </div>
+        </div>
       </div>
     </div>
   </div>

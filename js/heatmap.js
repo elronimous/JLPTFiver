@@ -12,10 +12,13 @@
     { key:"violet", name:"Violet", border:"rgba(168,85,247,.9)",  fill:"rgba(168,85,247,.52)" }
   ];
 
-  let panel, openSettingsBtn, hmGrid, hmMonthLabels, hmPrevYearBtn, hmNextYearBtn, hmYearLabel;
+  let panel, openSettingsBtn, openMonthlyBtn, hmGrid, hmMonthLabels, hmPrevYearBtn, hmNextYearBtn, hmYearLabel;
   let hmFirstVisitWrap, hmStreakWrap, hmTotalWrap, hmFirstVisitVal, hmStreakVal, hmTotalVal;
 
   let settingsBackdrop, closeSettingsBtn, hmShowFirstVisit, hmShowStreak, hmShowTotal, hmShowMonthTitles, hmPaletteOptions;
+  let monthlyBackdrop, closeMonthlyBtn, hmMonthlyList, hmMonthlyPrevBtn, hmMonthlyNextBtn, hmMonthlyLabel, hmMonthlySummary;
+  let hmMonthlyBarsGrammar, hmMonthlyBarsSentences, hmMonthlyBarsCram;
+  let selectedMonthKey = null; // "YYYY-MM"
   let goalsListEl, addGoalBtn, goalEditorEl;
 
   let goalCycleTimer = null;
@@ -76,6 +79,9 @@
     showTotal: true,
     paletteKey: "mint",
     visitedDays: {},
+    // Per-day study totals used for tooltips + monthly charts.
+    // Shape: { [ymd]: { srsSentences:number, crammed:number, srsGrammarKeys:{[grammarKey]:true} } }
+    dayStats: {},
     goals: [] // [{id, ymd, emoji, text}]
   };
 function stopGoalEmojiCycler(){
@@ -119,6 +125,7 @@ function startGoalEmojiCycler(){
       if (parsed && typeof parsed === "object"){
         state = { ...state, ...parsed };
         if (!state.visitedDays || typeof state.visitedDays !== "object") state.visitedDays = {};
+        if (!state.dayStats || typeof state.dayStats !== "object") state.dayStats = {};
         if (!Array.isArray(state.goals)) state.goals = [];
         if (typeof state.visible !== "boolean") state.visible = true;
       }
@@ -187,6 +194,106 @@ function startGoalEmojiCycler(){
   }
 
   function computeTotal(){ return getActiveVisitedYMDs().length; }
+
+  // ------------------------
+  // Day stats (SRS / CRAM)
+  // ------------------------
+  function ensureDayStats(ymd){
+    const k = String(ymd || "");
+    if (!k) return null;
+    state.dayStats = state.dayStats && typeof state.dayStats === "object" ? state.dayStats : {};
+    const cur = state.dayStats[k];
+    if (cur && typeof cur === "object") return cur;
+    const init = { srsSentences: 0, crammed: 0, srsGrammarKeys: {} };
+    state.dayStats[k] = init;
+    return init;
+  }
+
+  function countGrammarKeys(obj){
+    return obj && typeof obj === "object" ? Object.keys(obj).length : 0;
+  }
+
+  function getCountsForYMD(ymd){
+    const ds = state.dayStats && typeof state.dayStats === "object" ? state.dayStats[String(ymd || "")] : null;
+    if (!ds || typeof ds !== "object") return { grammar: 0, sentences: 0, crammed: 0 };
+    return {
+      grammar: countGrammarKeys(ds.srsGrammarKeys),
+      sentences: Math.max(0, Number(ds.srsSentences || 0)),
+      crammed: Math.max(0, Number(ds.crammed || 0))
+    };
+  }
+
+  function applyStudyUndo(undo){
+    if (!undo || typeof undo !== "object") return;
+    const ymd = String(undo.ymd || "");
+    if (!ymd) return;
+    const ds = ensureDayStats(ymd);
+    if (!ds) return;
+
+    const d = undo.delta && typeof undo.delta === "object" ? undo.delta : {};
+    if (d.srsSentences) ds.srsSentences = Math.max(0, Number(ds.srsSentences || 0) - Number(d.srsSentences || 0));
+    if (d.crammed) ds.crammed = Math.max(0, Number(ds.crammed || 0) - Number(d.crammed || 0));
+
+    const gk = String(undo.addedGrammarKey || "");
+    if (gk && ds.srsGrammarKeys && typeof ds.srsGrammarKeys === "object"){
+      delete ds.srsGrammarKeys[gk];
+    }
+
+    // Tidy empty records
+    const empty = (Number(ds.srsSentences || 0) <= 0) && (Number(ds.crammed || 0) <= 0) && (countGrammarKeys(ds.srsGrammarKeys) === 0);
+    if (empty){
+      delete state.dayStats[ymd];
+    }
+
+    save();
+  }
+
+  // Public helpers used by SRS/CRAM so these totals can be shown in tooltips + monthly charts.
+  Heatmap.recordSrsActivity = (info) => {
+    try{
+      const ymd = Utils.dateToYMD(new Date());
+      const ds = ensureDayStats(ymd);
+      if (!ds) return null;
+
+      // Always count a sentence/card interaction.
+      ds.srsSentences = Number(ds.srsSentences || 0) + 1;
+
+      // Track unique grammar keys per day.
+      let addedGrammarKey = null;
+      const gk = String(info && info.grammarKey ? info.grammarKey : "");
+      if (gk){
+        ds.srsGrammarKeys = ds.srsGrammarKeys && typeof ds.srsGrammarKeys === "object" ? ds.srsGrammarKeys : {};
+        if (!ds.srsGrammarKeys[gk]){
+          ds.srsGrammarKeys[gk] = true;
+          addedGrammarKey = gk;
+        }
+      }
+
+      // Mark today as visited (in case the user hasn't opened the page earlier).
+      state.visitedDays[ymd] = true;
+
+      save();
+      return { ymd, delta: { srsSentences: 1 }, addedGrammarKey };
+    }catch(e){
+      return null;
+    }
+  };
+
+  Heatmap.recordCramActivity = () => {
+    try{
+      const ymd = Utils.dateToYMD(new Date());
+      const ds = ensureDayStats(ymd);
+      if (!ds) return null;
+      ds.crammed = Number(ds.crammed || 0) + 1;
+      state.visitedDays[ymd] = true;
+      save();
+      return { ymd, delta: { crammed: 1 }, addedGrammarKey: null };
+    }catch(e){
+      return null;
+    }
+  };
+
+  Heatmap.applyStudyUndo = applyStudyUndo;
 
   // ------------------------
   // Snake mini-game helpers
@@ -278,7 +385,10 @@ function startGoalEmojiCycler(){
     const active = (snakeRainbowUntil && now < snakeRainbowUntil);
     if (!active){
       if (snakeRainbowApplied.size){
-        snakeRainbowApplied.forEach(idx=>{ try{ cells[idx]?.classList.remove("snake-rainbow"); }catch{} });
+        snakeRainbowApplied.forEach(idx=>{
+          try{ cells[idx]?.classList.remove("snake-rainbow"); }catch{}
+          try{ cells[idx]?.style?.removeProperty?.("--snake-rainbow-phase"); }catch{}
+        });
         snakeRainbowApplied.clear();
       }
       snakeRainbowUntil = 0;
@@ -286,10 +396,14 @@ function startGoalEmojiCycler(){
     }
 
     // Add rainbow to all current snake segments (including head as it moves)
+    // Update each segment every tick so longer snakes don't "drift" into a different look.
     for (let i=0;i<snake.length;i++){
       const idx = snake[i];
-      if (snakeRainbowApplied.has(idx)) continue;
-      try{ cells[idx]?.classList.add("snake-rainbow"); }catch{}
+      const el = cells[idx];
+      if (!el) continue;
+      try{ el.classList.add("snake-rainbow"); }catch{}
+      // Phase-shift the hue animation along the body so the whole snake has the same lively feel.
+      try{ el.style.setProperty("--snake-rainbow-phase", String(i)); }catch{}
       snakeRainbowApplied.add(idx);
     }
 
@@ -297,6 +411,7 @@ function startGoalEmojiCycler(){
     for (const idx of Array.from(snakeRainbowApplied)){
       if (snakeSet.has(idx)) continue;
       try{ cells[idx]?.classList.remove("snake-rainbow"); }catch{}
+      try{ cells[idx]?.style?.removeProperty?.("--snake-rainbow-phase"); }catch{}
       snakeRainbowApplied.delete(idx);
     }
   }
@@ -849,6 +964,213 @@ function startGoalEmojiCycler(){
     return (state.goals||[]).filter(g=>g.ymd===ymd);
   }
 
+  // ------------------------
+  // Monthly totals modal
+  // ------------------------
+  const MONTH_NAMES = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+
+  function monthKeyFromDate(d){
+    const y = d.getFullYear();
+    const m = String(d.getMonth()+1).padStart(2,"0");
+    return `${y}-${m}`;
+  }
+
+  function parseMonthKey(k){
+    const s = String(k || "");
+    const m = s.match(/^(\d{4})-(\d{2})$/);
+    if (!m) return null;
+    const year = Number(m[1]);
+    const monthIndex = Math.max(0, Math.min(11, Number(m[2]) - 1));
+    return { year, monthIndex };
+  }
+
+  function monthKeyAdd(k, deltaMonths){
+    const parsed = parseMonthKey(k);
+    if (!parsed) return monthKeyFromDate(new Date());
+    const d = new Date(parsed.year, parsed.monthIndex, 1);
+    d.setMonth(d.getMonth() + Number(deltaMonths || 0));
+    return monthKeyFromDate(d);
+  }
+
+  function monthLabel(k){
+    const p = parseMonthKey(k);
+    if (!p) return "—";
+    return `${MONTH_NAMES[p.monthIndex]} ${p.year}`;
+  }
+
+  function computeMonthTotals(k){
+    const p = parseMonthKey(k);
+    if (!p) return { grammar: 0, sentences: 0, crammed: 0, days: 0 };
+
+    const prefix = `${p.year}-${String(p.monthIndex+1).padStart(2,"0")}-`;
+    const dsObj = state.dayStats && typeof state.dayStats === "object" ? state.dayStats : {};
+    let sentences = 0;
+    let crammed = 0;
+    const grammarSet = new Set();
+    const daysSet = new Set();
+
+    Object.keys(dsObj).forEach(ymd => {
+      if (!String(ymd).startsWith(prefix)) return;
+      const ds = dsObj[ymd];
+      if (!ds || typeof ds !== "object") return;
+
+      const s = Math.max(0, Number(ds.srsSentences || 0));
+      const c = Math.max(0, Number(ds.crammed || 0));
+      const gk = ds.srsGrammarKeys && typeof ds.srsGrammarKeys === "object" ? ds.srsGrammarKeys : null;
+
+      if (s <= 0 && c <= 0 && countGrammarKeys(gk) === 0) return;
+
+      sentences += s;
+      crammed += c;
+      daysSet.add(ymd);
+      if (gk) Object.keys(gk).forEach(key => grammarSet.add(key));
+    });
+
+    return { grammar: grammarSet.size, sentences, crammed, days: daysSet.size };
+  }
+
+  function listMonthsWithAnyTotals(){
+    const dsObj = state.dayStats && typeof state.dayStats === "object" ? state.dayStats : {};
+    const set = new Set();
+    Object.keys(dsObj).forEach(ymd => {
+      const ds = dsObj[ymd];
+      if (!ds || typeof ds !== "object") return;
+      const has = (Math.max(0, Number(ds.srsSentences || 0)) > 0) || (Math.max(0, Number(ds.crammed || 0)) > 0) || (countGrammarKeys(ds.srsGrammarKeys) > 0);
+      if (!has) return;
+      const mk = String(ymd).slice(0,7);
+      if (/^\d{4}-\d{2}$/.test(mk)) set.add(mk);
+    });
+    const arr = Array.from(set);
+    arr.sort((a,b)=> b.localeCompare(a));
+    return arr;
+  }
+
+  function buildMonthSummaryLine(t){
+    const parts = [];
+    if (t.grammar > 0) parts.push(`Grammar ${t.grammar}`);
+    if (t.sentences > 0) parts.push(`Sentences ${t.sentences}`);
+    if (t.crammed > 0) parts.push(`Crammed ${t.crammed}`);
+    if (!parts.length) parts.push("No totals yet");
+    return parts.join(" · ");
+  }
+
+  function renderMonthlyList(){
+    if (!hmMonthlyList) return;
+    hmMonthlyList.innerHTML = "";
+    const months = listMonthsWithAnyTotals();
+    if (!months.length){
+      const d = document.createElement("div");
+      d.className = "modal-hint";
+      d.textContent = "No study totals yet.";
+      hmMonthlyList.appendChild(d);
+      return;
+    }
+
+    months.forEach(mk => {
+      const totals = computeMonthTotals(mk);
+      const item = document.createElement("div");
+      item.className = "hm-monthly-item" + (mk === selectedMonthKey ? " active" : "");
+      item.setAttribute("role", "button");
+      item.setAttribute("tabindex", "0");
+
+      const left = document.createElement("div");
+      const m = document.createElement("div");
+      m.className = "m";
+      m.textContent = monthLabel(mk);
+      const s = document.createElement("div");
+      s.className = "s";
+      s.textContent = buildMonthSummaryLine(totals);
+      left.appendChild(m);
+      left.appendChild(s);
+
+      const right = document.createElement("div");
+      right.className = "s";
+      right.textContent = totals.days > 0 ? `${totals.days} days` : "";
+
+      item.appendChild(left);
+      item.appendChild(right);
+
+      const select = () => {
+        selectedMonthKey = mk;
+        renderMonthlyList();
+        renderMonthlyRight();
+      };
+      item.addEventListener("click", select);
+      item.addEventListener("keydown", (ev)=>{
+        if (ev.key === "Enter" || ev.key === " ") { ev.preventDefault(); select(); }
+      });
+
+      hmMonthlyList.appendChild(item);
+    });
+  }
+
+  function fillBars(container, values, maxVal, labelPrefix){
+    if (!container) return;
+    container.innerHTML = "";
+    const max = Math.max(1, Number(maxVal || 1));
+    (values || []).forEach(v => {
+      const bar = document.createElement("div");
+      bar.className = "hm-monthly-bar" + (v.value <= 0 ? " zero" : "");
+      const pct = Math.max(0, Math.min(100, (v.value / max) * 100));
+      bar.style.height = `${pct}%`;
+      bar.title = `${labelPrefix} ${v.dateLabel}: ${v.value}`;
+      container.appendChild(bar);
+    });
+  }
+
+  function renderMonthlyRight(){
+    if (!hmMonthlyLabel || !hmMonthlySummary) return;
+    if (!selectedMonthKey) selectedMonthKey = monthKeyFromDate(new Date());
+
+    hmMonthlyLabel.textContent = monthLabel(selectedMonthKey);
+
+    const totals = computeMonthTotals(selectedMonthKey);
+    const lines = [];
+    if (totals.days > 0) lines.push(`Days with activity: ${totals.days}`);
+    if (totals.grammar > 0) lines.push(`Grammar: ${totals.grammar}`);
+    if (totals.sentences > 0) lines.push(`Sentences: ${totals.sentences}`);
+    if (totals.crammed > 0) lines.push(`Crammed: ${totals.crammed}`);
+    hmMonthlySummary.textContent = lines.length ? lines.join(" · ") : "No totals for this month.";
+
+    const p = parseMonthKey(selectedMonthKey);
+    if (!p) return;
+    const daysInMonth = new Date(p.year, p.monthIndex + 1, 0).getDate();
+
+    const gramVals = [];
+    const senVals = [];
+    const cramVals = [];
+    let gramMax = 0, senMax = 0, cramMax = 0;
+    for (let day=1; day<=daysInMonth; day++){
+      const ymd = `${p.year}-${String(p.monthIndex+1).padStart(2,"0")}-${String(day).padStart(2,"0")}`;
+      const dateObj = new Date(p.year, p.monthIndex, day);
+      const dateLabel = Utils.formatDMYShort(dateObj);
+      const c = getCountsForYMD(ymd);
+      gramMax = Math.max(gramMax, c.grammar);
+      senMax = Math.max(senMax, c.sentences);
+      cramMax = Math.max(cramMax, c.crammed);
+      gramVals.push({ value: c.grammar, dateLabel });
+      senVals.push({ value: c.sentences, dateLabel });
+      cramVals.push({ value: c.crammed, dateLabel });
+    }
+
+    fillBars(hmMonthlyBarsGrammar, gramVals, gramMax, "Grammar");
+    fillBars(hmMonthlyBarsSentences, senVals, senMax, "Sentences");
+    fillBars(hmMonthlyBarsCram, cramVals, cramMax, "Crammed");
+  }
+
+  function openMonthlyModal(){
+    if (!monthlyBackdrop) return;
+    selectedMonthKey = selectedMonthKey || monthKeyFromDate(new Date());
+    renderMonthlyList();
+    renderMonthlyRight();
+    monthlyBackdrop.hidden = false;
+  }
+
+  function closeMonthlyModal(){
+    if (!monthlyBackdrop) return;
+    monthlyBackdrop.hidden = true;
+  }
+
   function tooltipTextForDay(d, ymd){
     const lines = [Utils.formatDMYShort(d)];
     const goals = goalsForYMD(ymd);
@@ -858,6 +1180,12 @@ function startGoalEmojiCycler(){
         lines.push(`${g.emoji || "🎯"} ${msg}`.trim());
       });
     }
+
+    // Activity totals (only show non-zero lines)
+    const counts = getCountsForYMD(ymd);
+    if (counts.grammar > 0) lines.push(`Grammar: ${counts.grammar}`);
+    if (counts.sentences > 0) lines.push(`Sentences: ${counts.sentences}`);
+    if (counts.crammed > 0) lines.push(`Crammed: ${counts.crammed}`);
     return lines.join("\n");
   }
 
@@ -1211,6 +1539,7 @@ function startGoalEmojiCycler(){
     if (!incoming || typeof incoming !== "object") return;
     state = { ...state, ...incoming };
     if (!state.visitedDays || typeof state.visitedDays !== "object") state.visitedDays = {};
+    if (!state.dayStats || typeof state.dayStats !== "object") state.dayStats = {};
     if (!Array.isArray(state.goals)) state.goals = [];
     if (typeof state.visible !== "boolean") state.visible = true;
     save();
@@ -1227,6 +1556,7 @@ function startGoalEmojiCycler(){
   Heatmap.init = () => {
     panel = Utils.qs("#heatmapPanel");
     openSettingsBtn = Utils.qs("#openHeatmapSettingsBtn");
+    openMonthlyBtn = Utils.qs("#openHeatmapMonthlyBtn");
     hmGrid = Utils.qs("#hmGrid");
     hmMonthLabels = Utils.qs("#hmMonthLabels");
     hmPrevYearBtn = Utils.qs("#hmPrevYearBtn");
@@ -1248,6 +1578,17 @@ function startGoalEmojiCycler(){
     hmShowMonthTitles = Utils.qs("#hmShowMonthTitles");
     hmPaletteOptions = Utils.qs("#hmPaletteOptions");
 
+    monthlyBackdrop = Utils.qs("#heatmapMonthlyModalBackdrop");
+    closeMonthlyBtn = Utils.qs("#closeHeatmapMonthlyBtn");
+    hmMonthlyList = Utils.qs("#hmMonthlyList");
+    hmMonthlyPrevBtn = Utils.qs("#hmMonthlyPrevBtn");
+    hmMonthlyNextBtn = Utils.qs("#hmMonthlyNextBtn");
+    hmMonthlyLabel = Utils.qs("#hmMonthlyLabel");
+    hmMonthlySummary = Utils.qs("#hmMonthlySummary");
+    hmMonthlyBarsGrammar = Utils.qs("#hmMonthlyBarsGrammar");
+    hmMonthlyBarsSentences = Utils.qs("#hmMonthlyBarsSentences");
+    hmMonthlyBarsCram = Utils.qs("#hmMonthlyBarsCram");
+
     goalsListEl = Utils.qs("#hmGoalsList");
     addGoalBtn = Utils.qs("#hmAddGoalBtn");
     goalEditorEl = Utils.qs("#hmGoalEditor");
@@ -1268,6 +1609,21 @@ function startGoalEmojiCycler(){
     openSettingsBtn?.addEventListener("click", ()=>{ settingsBackdrop.hidden = false; });
     closeSettingsBtn?.addEventListener("click", ()=>{ settingsBackdrop.hidden = true; goalEditorEl.hidden = true; goalEditorEl.innerHTML=""; });
     settingsBackdrop?.addEventListener("click",(ev)=>{ if (ev.target === settingsBackdrop) { settingsBackdrop.hidden = true; goalEditorEl.hidden = true; goalEditorEl.innerHTML=""; } });
+
+    openMonthlyBtn?.addEventListener("click", ()=>openMonthlyModal());
+    closeMonthlyBtn?.addEventListener("click", ()=>closeMonthlyModal());
+    monthlyBackdrop?.addEventListener("click",(ev)=>{ if (ev.target === monthlyBackdrop) closeMonthlyModal(); });
+
+    hmMonthlyPrevBtn?.addEventListener("click", ()=>{
+      selectedMonthKey = monthKeyAdd(selectedMonthKey || monthKeyFromDate(new Date()), -1);
+      renderMonthlyList();
+      renderMonthlyRight();
+    });
+    hmMonthlyNextBtn?.addEventListener("click", ()=>{
+      selectedMonthKey = monthKeyAdd(selectedMonthKey || monthKeyFromDate(new Date()), +1);
+      renderMonthlyList();
+      renderMonthlyRight();
+    });
 
     hmShowFirstVisit.addEventListener("change", ()=>{ state.showFirstVisit = !!hmShowFirstVisit.checked; save(); applyStatsUI(); });
     hmShowStreak.addEventListener("change", ()=>{ state.showStreak = !!hmShowStreak.checked; save(); applyStatsUI(); });

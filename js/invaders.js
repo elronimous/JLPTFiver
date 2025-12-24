@@ -251,11 +251,22 @@ let canvas = null;
     const dx = tx - sx;
     const dy = ty - sy;
     const dist = Math.max(1, Math.hypot(dx, dy));
-    const speed = 620;
-    const vx = (dx/dist) * speed;
-    const vy = (dy/dist) * speed;
-
-    mc.shots.push({ sx, sy, tx, ty, x:sx, y:sy, vx, vy, speed, alive:true });
+    // Missile-feel: starts slower, accelerates, has a slight wobble, and leaves smoke.
+    // Travel time scales gently with distance so long shots still feel snappy.
+    const travel = Math.max(0.22, Math.min(0.62, dist / 1050));
+    const wobAmp = 3 + Math.random()*5;
+    const wobFreq = 5 + Math.random()*5;
+    const wobPhase = Math.random() * Math.PI * 2;
+    mc.shots.push({
+      sx, sy, tx, ty,
+      dx, dy, dist,
+      t: 0, travel,
+      wobAmp, wobFreq, wobPhase,
+      x: sx, y: sy,
+      px: sx, py: sy,
+      trail: [],
+      alive: true,
+    });
   }
 
   function mcExplode(x, y, maxR){
@@ -317,15 +328,36 @@ let canvas = null;
       }
     });
 
-    // move shots
+    // move shots (accelerate + wobble)
     mc.shots.forEach(s=>{
       if (!s.alive) return;
-      s.x += s.vx * dt;
-      s.y += s.vy * dt;
 
-      const reached = ( (s.vx >= 0 && s.x >= s.tx) || (s.vx < 0 && s.x <= s.tx) ) &&
-                      ( (s.vy >= 0 && s.y >= s.ty) || (s.vy < 0 && s.y <= s.ty) );
-      if (reached){
+      s.px = s.x; s.py = s.y;
+
+      // progress 0..1
+      s.t += (dt / Math.max(0.12, s.travel || 0.3));
+      const u = Math.max(0, Math.min(1, s.t));
+
+      // acceleration curve (starts slower, speeds up)
+      const ease = u * u;
+
+      // wobble perpendicular to the path; taper to zero at the target so it lands clean
+      const nx = (-s.dy / s.dist);
+      const ny = ( s.dx / s.dist);
+      const wob = Math.sin(u * s.wobFreq * Math.PI * 2 + s.wobPhase) * s.wobAmp * (1 - u);
+
+      const x = s.sx + s.dx * ease + nx * wob;
+      const y = s.sy + s.dy * ease + ny * wob;
+
+      s.x = x; s.y = y;
+
+      // smoke trail
+      s.trail.push({ x, y, life: 0.34, max: 0.34, r: 5 + Math.random()*3 });
+      if (s.trail.length > 24) s.trail.shift();
+      for (let i=0;i<s.trail.length;i++) s.trail[i].life -= dt;
+      s.trail = s.trail.filter(p=>p.life > 0);
+
+      if (u >= 1){
         s.alive = false;
         mcExplode(s.tx, s.ty, 62);
       }
@@ -342,6 +374,7 @@ let canvas = null;
     mc.explosions = mc.explosions.filter(ex=>ex.ttl > 0);
 
     // collision: incoming within explosions
+    const killed = [];
     for (const ex of mc.explosions){
       const r = ex.r;
       for (const m of mc.incoming){
@@ -350,9 +383,12 @@ let canvas = null;
         if (d <= r){
           m.alive = false;
           score += 10;
+          killed.push({ x: m.x, y: m.y });
         }
       }
     }
+    // When an incoming missile is hit, give it its own expanding blast (classic chain-reaction feel)
+    for (const k of killed) mcExplode(k.x, k.y, 54);
     // clear dead missiles
     mc.incoming = mc.incoming.filter(m=>m.alive);
     mc.shots = mc.shots.filter(s=>s.alive);
@@ -419,14 +455,51 @@ let canvas = null;
       ctx.fill();
     });
 
-    // player shots
-    ctx.strokeStyle = "rgba(34,211,238,.9)";
-    ctx.lineWidth = 2;
+    // player shots (missile-looking with wobble + smoke)
     mc.shots.forEach(s=>{
+      // smoke trail
+      if (s.trail && s.trail.length){
+        for (const p of s.trail){
+          const a = Math.max(0, Math.min(1, (p.life || 0) / (p.max || 0.34)));
+          ctx.fillStyle = `rgba(148,163,184,${0.18 * a})`;
+          ctx.beginPath();
+          ctx.arc(p.x, p.y, (p.r || 6) * (0.6 + 0.8*(1-a)), 0, Math.PI*2);
+          ctx.fill();
+        }
+      }
+
+      // missile body/head
+      const dx = (s.x - (s.px ?? s.sx));
+      const dy = (s.y - (s.py ?? s.sy));
+      const ang = Math.atan2(dy, dx);
+      ctx.save();
+      ctx.translate(s.x, s.y);
+      ctx.rotate(ang);
+
+      // faint contrail line behind the head
+      ctx.strokeStyle = "rgba(34,211,238,.55)";
+      ctx.lineWidth = 2;
       ctx.beginPath();
-      ctx.moveTo(s.sx, s.sy);
-      ctx.lineTo(s.x, s.y);
+      ctx.moveTo(-14, 0);
+      ctx.lineTo(-4, 0);
       ctx.stroke();
+
+      // missile head
+      ctx.fillStyle = "rgba(226,232,240,.95)";
+      ctx.beginPath();
+      ctx.moveTo(8, 0);
+      ctx.lineTo(-6, -4);
+      ctx.lineTo(-6, 4);
+      ctx.closePath();
+      ctx.fill();
+
+      // little engine glow
+      ctx.fillStyle = "rgba(34,211,238,.35)";
+      ctx.beginPath();
+      ctx.arc(-6, 0, 4.2, 0, Math.PI*2);
+      ctx.fill();
+
+      ctx.restore();
     });
 
     // explosions
