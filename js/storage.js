@@ -391,7 +391,7 @@
       settings: null,
       ui: null,
       heatmap: null,
-      srs: null
+      srs: null,
       userDataExtras: null
     };
     if (!parsed || typeof parsed !== "object") return out;
