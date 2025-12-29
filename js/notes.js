@@ -32,6 +32,68 @@
     return doc.body ? doc.body.innerHTML : "";
   }
 
+
+function stripExampleFormattingKeepHighlights(html){
+  // Remove inline styling noise (e.g., font-size) while keeping highlight colour/weight.
+  // This is intended for legacy notes that may have picked up pasted formatting.
+  try{
+    const parser = new DOMParser();
+    const doc = parser.parseFromString(`<div id="__root__">${String(html||"")}</div>`, "text/html");
+    const root = doc.getElementById("__root__");
+    if (!root) return String(html||"");
+
+    // Replace <font> tags with <span>, preserving colour if present.
+    root.querySelectorAll("font").forEach(f=>{
+      const span = doc.createElement("span");
+      const color = f.getAttribute("color");
+      if (color) span.style.color = color;
+      // Copy allowed styles if any
+      const fw = f.style && f.style.fontWeight ? f.style.fontWeight : "";
+      if (fw) span.style.fontWeight = fw;
+      span.innerHTML = f.innerHTML;
+      f.replaceWith(span);
+    });
+
+    const allowed = new Set(["color", "font-weight", "background-color"]);
+    root.querySelectorAll("*").forEach(el=>{
+      // Drop noisy/unsafe attrs (defence in depth)
+      Array.from(el.attributes).forEach(attr=>{
+        const name = attr.name.toLowerCase();
+        if (name.startsWith("on")) el.removeAttribute(attr.name);
+        if ((name === "href" || name === "src") && String(attr.value||"").trim().toLowerCase().startsWith("javascript:")){
+          el.removeAttribute(attr.name);
+        }
+      });
+
+      if (!el.hasAttribute("style")) return;
+      const style = String(el.getAttribute("style") || "");
+      const keep = [];
+      style.split(";").forEach(part=>{
+        const seg = part.trim();
+        if (!seg) return;
+        const idx = seg.indexOf(":");
+        if (idx === -1) return;
+        const prop = seg.slice(0, idx).trim().toLowerCase();
+        const val = seg.slice(idx+1).trim();
+        if (!val) return;
+        if (allowed.has(prop)) keep.push(`${prop}:${val}`);
+      });
+      if (keep.length) el.setAttribute("style", keep.join(";"));
+      else el.removeAttribute("style");
+    });
+
+    return root.innerHTML;
+  }catch(_e){
+    return String(html||"");
+  }
+}
+
+function normalizeExampleHtml(html){
+  // Always sanitize; optionally strip formatting.
+  const safe = notesSanitizeHtml(html);
+  return Storage.settings.cleanExampleFormatting ? stripExampleFormattingKeepHighlights(safe) : safe;
+}
+
   function notesCleanPlainText(text){
     let t = String(text||"").replace(/\r\n/g, "\n");
     t = t
@@ -399,6 +461,51 @@
     footer.appendChild(importBtn);
     footer.appendChild(addBtn);
 
+Notes.cleanAllExampleFormatting = () => {
+  const ud = Storage.userData || (Storage.userData = {});
+  if (!ud.notesByGrammar || typeof ud.notesByGrammar !== "object") ud.notesByGrammar = {};
+  let changed = false;
+  Object.keys(ud.notesByGrammar).forEach(k=>{
+    const arr = Array.isArray(ud.notesByGrammar[k]) ? ud.notesByGrammar[k] : [];
+    const out = arr.map(n=>{
+      const jp0 = String(n && n.jpHtml || "");
+      const en0 = String(n && n.enHtml || "");
+      const jp = stripExampleFormattingKeepHighlights(notesSanitizeHtml(jp0));
+      const en = stripExampleFormattingKeepHighlights(notesSanitizeHtml(en0));
+      if (jp !== jp0 || en !== en0) changed = true;
+      return { jpHtml: jp, enHtml: en };
+    });
+    ud.notesByGrammar[k] = out;
+  });
+  if (changed) Storage.saveUserData();
+};
+
+// Count how many *sentence rows* would change if we strip formatting noise.
+// A row counts if either JP or EN HTML would be modified by stripping.
+Notes.countExampleFormattingChanges = () => {
+  const ud = Storage.userData || (Storage.userData = {});
+  if (!ud.notesByGrammar || typeof ud.notesByGrammar !== "object") ud.notesByGrammar = {};
+  let affectedRows = 0;
+
+  Object.keys(ud.notesByGrammar).forEach(k=>{
+    const arr = Array.isArray(ud.notesByGrammar[k]) ? ud.notesByGrammar[k] : [];
+    arr.forEach(n=>{
+      const jp0 = String(n && n.jpHtml || "");
+      const en0 = String(n && n.enHtml || "");
+
+      // Compare *after sanitization* so we're counting only what stripping would remove.
+      const jpSafe = notesSanitizeHtml(jp0);
+      const enSafe = notesSanitizeHtml(en0);
+      const jpStripped = stripExampleFormattingKeepHighlights(jpSafe);
+      const enStripped = stripExampleFormattingKeepHighlights(enSafe);
+
+      if (jpSafe !== jpStripped || enSafe !== enStripped) affectedRows += 1;
+    });
+  });
+
+  return affectedRows;
+};
+
     section.appendChild(list);
     section.appendChild(footer);
 
@@ -419,11 +526,17 @@
 
     function getNotes(){
       if (!Array.isArray(Storage.userData.notesByGrammar[grammarKey])) Storage.userData.notesByGrammar[grammarKey] = [];
-      Storage.userData.notesByGrammar[grammarKey] = Storage.userData.notesByGrammar[grammarKey].map(n=>({
-        jpHtml: String(n.jpHtml||""),
-        enHtml: String(n.enHtml||"")
-      }));
-      return Storage.userData.notesByGrammar[grammarKey];
+let dirty = false;
+Storage.userData.notesByGrammar[grammarKey] = Storage.userData.notesByGrammar[grammarKey].map(n=>{
+  const jp0 = String(n.jpHtml||"");
+  const en0 = String(n.enHtml||"");
+  const jp = normalizeExampleHtml(jp0);
+  const en = normalizeExampleHtml(en0);
+  if (jp !== jp0 || en !== en0) dirty = true;
+  return { jpHtml: jp, enHtml: en };
+});
+if (dirty) Storage.saveUserData();
+return Storage.userData.notesByGrammar[grammarKey];
     }
 
     function syncFromDOM(){
@@ -436,7 +549,7 @@
         const jpText = (jp?.textContent||"").trim();
         const enText = (en?.textContent||"").trim();
         if (jpText || enText){
-          newNotes.push({ jpHtml: jp ? jp.innerHTML : "", enHtml: en ? en.innerHTML : "" });
+          newNotes.push({ jpHtml: jp ? normalizeExampleHtml(jp.innerHTML) : "", enHtml: en ? normalizeExampleHtml(en.innerHTML) : "" });
         }
       }
       Storage.userData.notesByGrammar[grammarKey] = newNotes;

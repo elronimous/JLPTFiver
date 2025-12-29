@@ -124,6 +124,8 @@
     }
 
     if (typeof Storage.settings.srsEnabled !== "boolean") Storage.settings.srsEnabled = false;
+    if (typeof Storage.settings.showBackOnRight !== "boolean") Storage.settings.showBackOnRight = false;
+    if (typeof Storage.settings.cleanExampleFormatting !== "boolean") Storage.settings.cleanExampleFormatting = false;
     if (typeof Storage.settings.cardFontScale !== "number" || !Number.isFinite(Storage.settings.cardFontScale)){
       Storage.settings.cardFontScale = 1;
     }
@@ -150,6 +152,183 @@
     Storage.ui.snakeHiScore = (Number.isFinite(hs) ? Math.max(0, Math.floor(hs)) : 0);
   }
   migrate();
+
+  // Grammar key migration: old keys were `${level}_${grammar}`; new keys are `${level}_${index}` (unique per point).
+  // This fixes duplicate grammar titles (e.g., の / と) collapsing into a single SRS/progress entry.
+  Storage.migrateGrammarKeysToIndexV1 = () => {
+    const ud = Storage.userData || (Storage.userData = {});
+    if (!ud.migrations || typeof ud.migrations !== "object") ud.migrations = {};
+    if (ud.migrations.grammarKeysIndexV1) return false;
+
+    const byLevel = window.App.State?.byLevel;
+    if (!byLevel) return false;
+
+    // Map oldKey -> [newKey,...]
+    const map = new Map();
+    (CONST.LEVEL_ORDER || ["N5","N4","N3","N2","N1"]).forEach(level=>{
+      (byLevel[level] || []).forEach(gp=>{
+        const oldK = `${gp.level}_${gp.grammar}`;
+        const newK = String(gp.key || `${gp.level}_${gp.index}`);
+        if (!map.has(oldK)) map.set(oldK, []);
+        const arr = map.get(oldK);
+        if (!arr.includes(newK)) arr.push(newK);
+      });
+    });
+
+    const expand = (k) => {
+      const key = String(k || "");
+      if (!key) return [];
+      const arr = map.get(key);
+      return (arr && arr.length) ? arr : [key];
+    };
+
+    let changed = false;
+
+    // 1) SRS active keys
+    if (ud.srs && Array.isArray(ud.srs.grammarKeys)){
+      const out = [];
+      const seen = new Set();
+      ud.srs.grammarKeys.forEach(k=>{
+        const mapped = map.get(String(k || ""));
+        if (mapped && mapped.length) changed = true;
+        expand(k).forEach(nk=>{
+          if (!nk) return;
+          if (seen.has(nk)) return;
+          seen.add(nk);
+          out.push(nk);
+        });
+      });
+      ud.srs.grammarKeys = out;
+    }
+
+    // 2) SRS cardsByKey
+    if (ud.srs && ud.srs.cardsByKey && typeof ud.srs.cardsByKey === "object"){
+      const cards = ud.srs.cardsByKey;
+      Object.keys(cards).forEach(k=>{
+        const mapped = map.get(String(k));
+        if (!mapped || !mapped.length) return;
+        mapped.forEach(nk=>{
+          if (cards[nk] !== undefined) return;
+          try{ cards[nk] = JSON.parse(JSON.stringify(cards[k])); }
+          catch{ cards[nk] = cards[k]; }
+        });
+        delete cards[k];
+        changed = true;
+      });
+    }
+
+    // 3) Notes by grammar
+    if (ud.notesByGrammar && typeof ud.notesByGrammar === "object"){
+      const notes = ud.notesByGrammar;
+      Object.keys(notes).forEach(k=>{
+        const mapped = map.get(String(k));
+        if (!mapped || !mapped.length) return;
+        const incArr = Array.isArray(notes[k]) ? notes[k] : [];
+        mapped.forEach(nk=>{
+          if (!notes[nk]){
+            notes[nk] = incArr;
+            return;
+          }
+          const curArr = Array.isArray(notes[nk]) ? notes[nk] : [];
+          const seen = new Set(curArr.map(n=>`${n?.jpHtml||""}|||${n?.enHtml||""}`));
+          incArr.forEach(n=>{
+            const kk = `${n?.jpHtml||""}|||${n?.enHtml||""}`;
+            if (seen.has(kk)) return;
+            seen.add(kk);
+            curArr.push(n);
+          });
+          notes[nk] = curArr;
+        });
+        delete notes[k];
+        changed = true;
+      });
+    }
+
+    // 4) Cram custom lists
+    if (Storage.ui && Storage.ui.cramLists && typeof Storage.ui.cramLists === "object"){
+      Object.keys(Storage.ui.cramLists).forEach(name=>{
+        const arr = Array.isArray(Storage.ui.cramLists[name]) ? Storage.ui.cramLists[name] : [];
+        const out = [];
+        const seen = new Set();
+        arr.forEach(k=>{
+          const mapped = map.get(String(k || ""));
+          if (mapped && mapped.length) changed = true;
+          expand(k).forEach(nk=>{
+            if (!nk) return;
+            if (seen.has(nk)) return;
+            seen.add(nk);
+            out.push(nk);
+          });
+        });
+        Storage.ui.cramLists[name] = out;
+      });
+    }
+
+    // 5) Heatmap local storage (dayStats[].srsGrammarKeys)
+    try{
+      const raw = localStorage.getItem(CONST.STORAGE_KEYS.HEATMAP);
+      if (raw){
+        const parsed = JSON.parse(raw);
+        if (parsed && typeof parsed === "object" && parsed.dayStats && typeof parsed.dayStats === "object"){
+          Object.keys(parsed.dayStats).forEach(ymd=>{
+            const ds = parsed.dayStats[ymd];
+            if (!ds || typeof ds !== "object") return;
+            const gk = ds.srsGrammarKeys;
+            if (!gk || typeof gk !== "object") return;
+            const out = {};
+            let localChanged = false;
+            Object.keys(gk).forEach(k=>{
+              const mapped = map.get(String(k));
+              if (mapped && mapped.length) localChanged = true;
+              expand(k).forEach(nk=>{ if (nk) out[nk] = true; });
+            });
+            if (localChanged){
+              ds.srsGrammarKeys = out;
+              changed = true;
+            }
+          });
+          localStorage.setItem(CONST.STORAGE_KEYS.HEATMAP, JSON.stringify(parsed));
+        }
+      }
+    }catch(_e){}
+
+    // 6) Cram session snapshot local storage (wrongGrammar[].key)
+    try{
+      const raw = localStorage.getItem(CONST.STORAGE_KEYS.CRAM_SESSION);
+      if (raw){
+        const parsed = JSON.parse(raw);
+        if (parsed && typeof parsed === "object" && Array.isArray(parsed.wrongGrammar)){
+          let localChanged = false;
+          const out = [];
+          parsed.wrongGrammar.forEach(w=>{
+            const k = String(w?.key || "");
+            const mapped = map.get(k);
+            if (mapped && mapped.length){
+              localChanged = true;
+              mapped.forEach(nk=> out.push({ ...w, key: nk }));
+            } else {
+              out.push(w);
+            }
+          });
+          if (localChanged){
+            parsed.wrongGrammar = out;
+            localStorage.setItem(CONST.STORAGE_KEYS.CRAM_SESSION, JSON.stringify(parsed));
+            changed = true;
+          }
+        }
+      }
+    }catch(_e){}
+
+    ud.migrations.grammarKeysIndexV1 = true;
+    if (changed){
+      Storage.saveUserData();
+      Storage.saveUi();
+    } else {
+      // Still persist the migration flag so we don't keep scanning.
+      Storage.saveUserData();
+    }
+    return changed;
+  };
 
   Storage.saveUi = () => {
     saveJSON(CONST.STORAGE_KEYS.FILTERS, Storage.ui.filters);
@@ -213,6 +392,7 @@
       ui: null,
       heatmap: null,
       srs: null
+      userDataExtras: null
     };
     if (!parsed || typeof parsed !== "object") return out;
 
@@ -242,6 +422,16 @@
     };
     if (ui && typeof ui === "object") out.ui = ui;
 
+    // Extras: achievements/migrations live outside the core SRS object but affect SRS Progress + celebrations.
+    const extras = parsed.userDataExtras || srcUser.userDataExtras || null;
+    const achievements = (extras && typeof extras === "object") ? extras.achievements : (parsed.achievements || srcUser.achievements);
+    const migrations = (extras && typeof extras === "object") ? extras.migrations : (parsed.migrations || srcUser.migrations);
+    const udx = {};
+    if (achievements && typeof achievements === "object") udx.achievements = achievements;
+    if (migrations && typeof migrations === "object") udx.migrations = migrations;
+    if (Object.keys(udx).length) out.userDataExtras = udx;
+
+
     if (parsed.heatmap && typeof parsed.heatmap === "object") out.heatmap = parsed.heatmap;
 
     return out;
@@ -256,6 +446,7 @@
       hasNotes: isObj(n.notesByGrammar),
       hasScores: isObj(n.scoresByExample),
       hasSrs: isObj(n.srs),
+      hasUserDataExtras: isObj(n.userDataExtras),
       hasSettings: isObj(n.settings),
       hasUi: isObj(n.ui) && (isObj(n.ui.filters) || isObj(n.ui.expanded) || isObj(n.ui.cramLists) || Number.isFinite(Number(n.ui.snakeHiScore)) || Number.isFinite(Number(n.ui.invadersHiScore)) || Number.isFinite(Number(n.ui.asteroidsHiScore))),
       hasCramLists: isObj(n.ui) && isObj(n.ui.cramLists),
@@ -408,7 +599,57 @@
       else Storage.userData.srs = mergeSrs(Storage.userData.srs, n.srs);
     }
 
+
+    // Achievements / celebrations
+    if (!ud.achievements || typeof ud.achievements !== "object") ud.achievements = {};
+    const ach = ud.achievements;
+
+    // Ordered list of JLPT levels completed (used for multi-colour fireworks palettes).
+    if (!Array.isArray(ach.srsLevelCompletions)) ach.srsLevelCompletions = [];
+    const allowedLevels = new Set((CONST.LEVEL_ORDER || ["N5","N4","N3","N2","N1"]).map(String));
+    const seen = new Set();
+    ach.srsLevelCompletions = ach.srsLevelCompletions
+      .map(x=>String(x))
+      .filter(x=>allowedLevels.has(x))
+      .filter(x=>{ if (seen.has(x)) return false; seen.add(x); return true; });
+
     // Settings
+
+    // SRS extras (achievements/migrations) — included with SRS so progress celebrations restore correctly.
+    if (include.srs && n.userDataExtras && typeof n.userDataExtras === "object"){
+      const incAch = n.userDataExtras.achievements;
+      const incMig = n.userDataExtras.migrations;
+      if (!Storage.userData || typeof Storage.userData !== "object") Storage.userData = {};
+
+      // Overwrite: replace entire objects. Merge: union while preserving existing order when meaningful.
+      if (incAch && typeof incAch === "object"){
+        if (!Storage.userData.achievements || typeof Storage.userData.achievements !== "object") Storage.userData.achievements = {};
+        const cur = Storage.userData.achievements;
+        const inc = incAch;
+        const mergeOrderedUnique = (curArr, incArr)=>{
+          const out = Array.isArray(curArr) ? curArr.map(String) : [];
+          const set = new Set(out);
+          (Array.isArray(incArr) ? incArr : []).map(String).forEach(x=>{ if (x && !set.has(x)){ set.add(x); out.push(x); } });
+          return out;
+        };
+        if (mode === "overwrite"){
+          Storage.userData.achievements = inc;
+        }else{
+          // Merge only the SRS-related achievement arrays we use right now.
+          cur.srsLevelCompletions = mergeOrderedUnique(cur.srsLevelCompletions, inc.srsLevelCompletions);
+          cur.srsLevelCelebrated = mergeOrderedUnique(cur.srsLevelCelebrated, inc.srsLevelCelebrated);
+        }
+      }
+      if (incMig && typeof incMig === "object"){
+        if (mode === "overwrite"){
+          Storage.userData.migrations = incMig;
+        }else{
+          if (!Storage.userData.migrations || typeof Storage.userData.migrations !== "object") Storage.userData.migrations = {};
+          Object.keys(incMig).forEach(k=>{ if (Storage.userData.migrations[k] === undefined) Storage.userData.migrations[k] = incMig[k]; });
+        }
+      }
+    }
+
     if (include.settings && n.settings){
       if (mode === "overwrite") Storage.settings = { ...Storage.settings, ...n.settings };
       else {

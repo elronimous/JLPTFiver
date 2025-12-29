@@ -34,6 +34,7 @@
       byLevel[level] = byLevel[level] || [];
 
       const links = [];
+      const idx = parseInt(row[1],10) || (byLevel[level].length + 1);
       for (let i=5;i<row.length;i++){
         if (row[i] && row[i].trim()) links.push(row[i].trim());
       }
@@ -42,7 +43,8 @@
 
       byLevel[level].push({
         level,
-        index: parseInt(row[1],10) || (byLevel[level].length + 1),
+        index: idx,
+        key: `${level}_${idx}`,
         grammar: row[2].trim(),
         romaji: row[3].trim() || "",
         meaning: row[4].trim() || "",

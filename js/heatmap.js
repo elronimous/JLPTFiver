@@ -36,6 +36,82 @@
   let snakeSubEl = null;
   let snakeFireCanvas = null;
   let snakeFireCtx = null;
+  // --- Fireworks starfield (used for Celebration room / fireworks-only mode) ---
+  let snakeFireStars = [];
+  let snakeFireStarDims = { w: 0, h: 0 };
+  function buildSnakeFireStars(w, h){
+    // Rebuild only when size meaningfully changes.
+    if (!w || !h) return;
+    const dw = Math.abs((snakeFireStarDims.w||0) - w);
+    const dh = Math.abs((snakeFireStarDims.h||0) - h);
+    if (snakeFireStars.length && dw < 40 && dh < 40) return;
+
+    snakeFireStarDims = { w, h };
+    const area = w * h;
+    const count = Math.max(140, Math.min(260, Math.round(area / 9000))); // ~150–250 on typical screens
+    snakeFireStars = [];
+    for (let i=0;i<count;i++){
+      const x = Math.random() * w;
+      const y = Math.random() * h;
+      const r = 0.9 + Math.random() * 2.2;
+      const tw = 0.6 + Math.random() * 2.2;        // twinkle speed
+      const ph = Math.random() * Math.PI * 2;      // phase
+      const base = 0.30 + Math.random() * 0.55;    // base alpha
+      const tintPick = Math.random();
+      // Subtle colour variation (still "spacey" but not rainbow)
+      const tint = tintPick < 0.78 ? "w" : (tintPick < 0.90 ? "b" : "p"); // white / blue / purple
+      snakeFireStars.push({ x, y, r, tw, ph, base, tint });
+    }
+  }
+  function drawSnakeFireStars(ts, w, h){
+    if (!snakeFireCtx) return;
+    // Ensure later fireworks drawing modes (lighter/globalAlpha tweaks) don't make the starfield invisible.
+    snakeFireCtx.globalCompositeOperation = "source-over";
+    snakeFireCtx.globalAlpha = 1;
+    buildSnakeFireStars(w, h);
+
+    // A gentle space gradient (painted lightly, so the trail system still works)
+    const g = snakeFireCtx.createLinearGradient(0, 0, 0, h);
+    g.addColorStop(0, "rgba(10,18,60,0.35)");
+    g.addColorStop(1, "rgba(2,6,23,0.30)");
+    snakeFireCtx.fillStyle = g;
+    snakeFireCtx.fillRect(0,0,w,h);
+    // Celebration room: add a starfield + subtle colour to make the scene feel more "spacey"
+    if (fireworksOnlyActive){
+      try{ drawSnakeFireStars(ts, w, h); }catch(_e){}
+    }
+
+
+    // A couple of soft nebulas
+    const t = (ts || 0) / 1000;
+    for (let k=0;k<2;k++){
+      const cx = (0.25 + k*0.5) * w + Math.sin(t*0.12 + k) * 30;
+      const cy = (0.22 + k*0.32) * h + Math.cos(t*0.10 + k) * 26;
+      const rr = Math.max(w,h) * 0.35;
+      const rg = snakeFireCtx.createRadialGradient(cx, cy, rr*0.1, cx, cy, rr);
+      rg.addColorStop(0, k===0 ? "rgba(99,102,241,0.16)" : "rgba(168,85,247,0.14)");
+      rg.addColorStop(1, "rgba(2,6,23,0)");
+      snakeFireCtx.fillStyle = rg;
+      snakeFireCtx.fillRect(0,0,w,h);
+    }
+
+    // Stars
+    snakeFireCtx.shadowBlur = 6;
+    snakeFireCtx.shadowColor = "rgba(255,255,255,0.25)";
+    for (let i=0;i<snakeFireStars.length;i++){
+      const st = snakeFireStars[i];
+      const a = Math.max(0, Math.min(1, st.base + 0.45 * Math.sin(t * st.tw + st.ph)));
+      let col = `rgba(255,255,255,${a})`;
+      if (st.tint === "b") col = `rgba(180,215,255,${a})`;
+      if (st.tint === "p") col = `rgba(230,210,255,${a})`;
+      snakeFireCtx.fillStyle = col;
+      snakeFireCtx.beginPath();
+      snakeFireCtx.arc(st.x, st.y, st.r, 0, Math.PI*2);
+      snakeFireCtx.fill();
+    }
+    snakeFireCtx.shadowBlur = 0;
+  }
+
 
   // Rainbow should follow the snake as it moves
   let snakeRainbowUntil = 0;
@@ -303,12 +379,78 @@ function startGoalEmojiCycler(){
   let fireworksPointerHandler = null;
   let fireworksKeyHandler = null;
 
+
+  // Fireworks palette (used for "fireworks-only" celebrations; snake game remains random)
+  let fireworkHuePalette = null;
+
+  function setFireworkHuePalette(palette){
+    if (Array.isArray(palette) && palette.length){
+      const cleaned = palette.map(n=>Number(n)).filter(n=>Number.isFinite(n));
+      fireworkHuePalette = cleaned.length ? cleaned : null;
+    }else{
+      fireworkHuePalette = null;
+    }
+  }
+
+  // Ensure palette is initialised after the backing variable exists (avoids TDZ errors).
+  setFireworkHuePalette(null);
+
+  function pickFireworkHue(){
+    if (fireworksOnlyActive && fireworkHuePalette && fireworkHuePalette.length){
+      return fireworkHuePalette[Math.floor(Math.random() * fireworkHuePalette.length)];
+    }
+    return Math.floor(Math.random() * 360);
+  }
+
+  function levelHue(level){
+    const hex = (CONST && CONST.LEVEL_COLORS && CONST.LEVEL_COLORS[level]) ? CONST.LEVEL_COLORS[level] : null;
+    if (!hex) return null;
+    try{
+      const h = String(hex).replace("#","");
+      if (h.length !== 6) return null;
+      const r = parseInt(h.slice(0,2),16) / 255;
+      const g = parseInt(h.slice(2,4),16) / 255;
+      const b = parseInt(h.slice(4,6),16) / 255;
+
+      const mx = Math.max(r,g,b);
+      const mn = Math.min(r,g,b);
+      const d = mx - mn;
+      let hue = 0;
+      if (d === 0) hue = 0;
+      else if (mx === r) hue = ((g - b) / d) % 6;
+      else if (mx === g) hue = ((b - r) / d) + 2;
+      else hue = ((r - g) / d) + 4;
+
+      hue = Math.round(hue * 60);
+      if (hue < 0) hue += 360;
+      return hue;
+    }catch{
+      return null;
+    }
+  }
+
+  function paletteFromCompletedLevels(levels){
+    const arr = Array.isArray(levels) ? levels : [];
+    const hues = [];
+    arr.forEach(lvl=>{
+      const h = levelHue(String(lvl));
+      if (!Number.isFinite(h)) return;
+
+      // A couple of shades per level: base, +10, -10 (wrapped)
+      const shades = [h, (h + 10) % 360, (h + 350) % 360];
+      shades.forEach(x=>{
+        const v = Math.round(Number(x));
+        if (!hues.includes(v)) hues.push(v);
+      });
+    });
+    return hues.length ? hues : null;
+  }
   function launchClickFireworks(clientX, clientY){
     try{
       if (!snakeFireCtx) return;
       const x = Math.max(0, Math.min(window.innerWidth, Number(clientX) || 0));
       const y = Math.max(0, Math.min(window.innerHeight, Number(clientY) || 0));
-      const hue = Math.floor(Math.random()*360);
+      const hue = pickFireworkHue();
 
       // Launch a rocket that *explodes at the click destination* (no instant burst on click).
       const h = Math.max(1, window.innerHeight);
@@ -406,6 +548,14 @@ function startGoalEmojiCycler(){
     if (congrats) congrats.textContent = "";
     try{ hideSnakeOverlay(); }catch{}
   }
+  // Public: fireworks celebration that can use JLPT level colours.
+  // completedLevels: ordered array e.g. ["N5","N3"] -> adds both colours to the palette.
+  Heatmap.playLevelCompletionFireworks = (completedLevels, message) => {
+    // Only applies to fireworks-only overlays.
+    setFireworkHuePalette(paletteFromCompletedLevels(completedLevels));
+    return startFireworksOverlay(String(message || "Congratulations! 🎉"));
+  };
+
 
   // Public: call after incrementing CRAM activity. Triggers once per day when count >= goal.
   Heatmap.maybeCelebrateCramGoal = (goal) => {
@@ -414,6 +564,8 @@ function startGoalEmojiCycler(){
 
     const ymd = Utils.dateToYMD(new Date());
     if (!state.cramGoalFiredDays || typeof state.cramGoalFiredDays !== "object") state.cramGoalFiredDays = {};
+
+
     if (state.cramGoalFiredDays[ymd]) return false;
 
     const crammed = Number(state.dayStats?.[ymd]?.crammed || 0);
@@ -421,6 +573,7 @@ function startGoalEmojiCycler(){
 
     state.cramGoalFiredDays[ymd] = true;
     save();
+    setFireworkHuePalette(null);
     return startFireworksOverlay("Congratulations! Daily goal reached 🎉 — click anywhere for more fireworks.");
   };
 
@@ -564,6 +717,9 @@ function startGoalEmojiCycler(){
       try{ snakeFireCtx = snakeFireCanvas.getContext("2d"); }catch{ snakeFireCtx = null; }
     }
     if (snakeFireCtx) snakeFireCtx.setTransform(dpr,0,0,dpr,0,0);
+    // Keep starfield density reasonable after resize
+    buildSnakeFireStars(w, h);
+
   }
 
   function stopSnakeFireworks(){
@@ -601,7 +757,7 @@ function startGoalEmojiCycler(){
     const y = h + 10;
     const vx = (Math.random()-0.5) * 40;
     const vy = -(320 + Math.random()*260);
-    const hue = Math.floor(Math.random()*360);
+    const hue = pickFireworkHue();
     const apex = (h*0.18) + Math.random()*(h*0.35);
     return { x, y, vx, vy, hue, apex, ttl: burst ? 1.8 : 2.6,
       wobT: 0,

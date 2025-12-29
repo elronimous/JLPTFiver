@@ -92,6 +92,7 @@ body{
   -webkit-tap-highlight-color: transparent;
 }
 .chip-btn.primary{border-color:var(--accent);color:#e0f2fe}
+.chip-btn.active{border-color:var(--accent);color:#ffffff;background:radial-gradient(circle at top,rgba(56,189,248,.22),transparent 65%)}
 .chip-btn.icon-only{padding-inline:.4rem;width:1.8rem;justify-content:center}
 .chip-btn:hover{
   border-color:var(--accent);
@@ -904,6 +905,7 @@ body.snake-mode #heatmapPanel{
 }
 .hm-snake-overlay .hm-snake-quit{
   position:fixed;
+  z-index: 200;
   top:1rem;
   right:1rem;
   pointer-events:auto;

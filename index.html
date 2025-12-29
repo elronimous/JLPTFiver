@@ -39,7 +39,7 @@
         <button id="openSrsBtn" class="chip-btn">SRS</button>
 
         <span class="level-filter-spacer"></span>
-        <button id="openProgressStatsBtn" class="chip-btn" title="Progress stats">📊 Progress</button>
+        <button id="openProgressStatsBtn" class="chip-btn" title="SRS progress stats">📊 SRS Progress</button>
       </div>
     </header>
 
@@ -139,6 +139,10 @@
           <input id="toggleHideEnglishNotes" type="checkbox" />
           <span>Hide English by default</span>
         </label>
+<label class="settings-row" for="toggleCleanExampleFormatting">
+  <input id="toggleCleanExampleFormatting" type="checkbox" />
+  <span>Clean formatting in example sentences (keeps highlights)</span>
+</label>
 
         <div class="settings-section-title">Scoring</div>
         <label class="settings-row" for="toggleEmojiScores">
@@ -189,7 +193,8 @@
 <div id="progressStatsModalBackdrop" class="modal-backdrop" hidden>
   <div class="modal modal-wide progress-modal">
     <div class="modal-header">
-      <div class="modal-title">Progress stats</div>
+      <div class="modal-title">SRS Progress</div>
+      <button id="openCelebrationRoomBtn" class="chip-btn" type="button" hidden>Celebration room</button>
       <button id="closeProgressStatsBtn" class="modal-close-btn" aria-label="Close">✕</button>
     </div>
     <div class="modal-body">
@@ -749,7 +754,17 @@
       <div class="cram-session-actions">
         <button id="cramQuitBtn" class="chip-btn" type="button">✕ Quit</button>
       </div>
+    
+<div class="srs-options-row">
+  <div class="srs-left-col">
+    <div class="srs-mode-group">
+      <div class="viewall-filter-label">Card flow</div>
+      <button id="cramShowBackOnRightBtn" class="chip-btn" type="button">Show Card Back</button>
     </div>
+  </div>
+</div>
+
+</div>
 
     <div class="cram-card-wrap">
       <div id="cramCard" class="cram-card" tabindex="0" role="button" aria-label="Flashcard"></div>
@@ -799,7 +814,12 @@
             <input id="srsExamplesPerGrammar" class="cram-select cram-number" type="number" min="1" max="10" step="1" value="3" />
             <button id="srsExamplesAllBtn" class="chip-btn srs-all-btn" type="button" title="Use all available sentences">ALL</button>
           </div>
-        </div>
+        
+<div class="srs-mode-group">
+  <div class="viewall-filter-label">Card flow</div>
+  <button id="srsShowBackOnRightBtn" class="chip-btn" type="button">Show Card Back</button>
+</div>
+</div>
       </div>
     </div>
 

@@ -808,7 +808,7 @@ let canvas = null;
   }
 
   function getFlashcardNotes(gp){
-    const grammarKey = gp ? `${gp.level}_${gp.grammar}` : "";
+    const grammarKey = gp ? String(gp.key || `${gp.level}_${gp.index}`) : "";
     const notesApi = window.App?.Notes;
     const notes = (notesApi && typeof notesApi.getNotes === "function") ? (notesApi.getNotes(grammarKey) || []) : [];
     if (!Array.isArray(notes)) return [];
@@ -1192,9 +1192,9 @@ let canvas = null;
 
   function getExampleCacheKey(gp){
     if (!gp) return "";
-    // Prefer stable numeric index if present
-    if (gp.index !== undefined && gp.index !== null) return String(gp.index);
-    // Fall back to level+grammar
+    // Prefer the app-wide unique grammar key (level_index)
+    if (gp.key) return String(gp.key);
+    if (gp.level && (gp.index !== undefined && gp.index !== null)) return `${gp.level}_${gp.index}`;
     return `${gp.level || ""}__${gp.grammar || ""}`;
   }
 

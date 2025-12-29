@@ -116,6 +116,7 @@
   let totalInitial = 0;
   let showingBack = false;
   let awaitingNext = false; // after marking WRONG, show back + NEXT
+  let pendingRightAdvance = false; // after RIGHT (optional), show back then advance on a 2nd press
   let hasManualSave = false; // becomes true after saving (via Quit) or resuming a saved session
   let undoState = null; // last pre-answer snapshot for UNDO
 
@@ -128,23 +129,28 @@
     return ae.isContentEditable || tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT";
   }
   function onKeyDown(ev){
-    if (ev.key !== "ArrowRight") return;
-    if (!document.body.classList.contains("cram-session-open")) return;
-    if (isTypingInField()) return;
+  const isArrow = ev.key === "ArrowRight";
+  const isNumpad = (ev.location === 3 && (ev.key === "1" || ev.key === "2" || ev.key === "3"))
+    || (ev.code === "Numpad1" || ev.code === "Numpad2" || ev.code === "Numpad3");
 
-    // Prevent page scroll while the session overlay is open.
-    ev.preventDefault();
+  if (!isArrow && !isNumpad) return;
+  if (!document.body.classList.contains("cram-session-open")) return;
+  if (isTypingInField()) return;
 
-    // If session is complete (results card), do nothing.
-    if (!Array.isArray(deck) || deck.length === 0) return;
+  // Prevent page scroll while the session overlay is open.
+  ev.preventDefault();
 
+  // If session is complete (results card), do nothing.
+  if (!Array.isArray(deck) || deck.length === 0) return;
+
+  if (isArrow){
     if (!showingBack){
       showingBack = true;
       renderCard();
       return;
     }
 
-    // Prefer explicit NEXT (after WRONG) if available, otherwise treat as "Right".
+    // Prefer explicit NEXT (after WRONG) if available, otherwise treat as "Right" (or "Next" in pending-right mode).
     if (nextBtn && !nextBtn.hidden && !nextBtn.disabled){
       nextBtn.click();
       return;
@@ -152,8 +158,38 @@
     if (rightBtn && !rightBtn.hidden && !rightBtn.disabled){
       rightBtn.click();
     }
+    return;
   }
-  function attachKeydown(){
+
+  // Numpad hotkeys:
+  // 1 = WRONG (or UNDO if you've already answered this card)
+  // 2 = RIGHT (or switch WRONG -> RIGHT if you've already marked wrong)
+  // 3 = UNDO
+  const k = ev.key || "";
+  const canUndoNow = undoBtn && !undoBtn.disabled;
+
+  if (k === "3"){
+    if (canUndoNow) undoBtn.click();
+    return;
+  }
+
+  if (k === "1"){
+    if ((awaitingNext || pendingRightAdvance) && canUndoNow){
+      undoBtn.click();
+      return;
+    }
+    if (wrongBtn && !wrongBtn.hidden && !wrongBtn.disabled) wrongBtn.click();
+    return;
+  }
+
+  if (k === "2"){
+    if (awaitingNext && canUndoNow){
+      undoBtn.click();
+    }
+    if (rightBtn && !rightBtn.hidden && !rightBtn.disabled) rightBtn.click();
+  }
+}
+function attachKeydown(){
     if (keydownAttached) return;
     keydownAttached = true;
     document.addEventListener("keydown", onKeyDown);
@@ -176,7 +212,8 @@
     return `${gp.level}_${gp.index}`;
   }
   function grammarKeyOf(gp){
-    return `${gp.level}_${gp.grammar}`;
+    if (!gp) return "";
+    return String(gp.key || `${gp.level}_${gp.index}`);
   }
 
   function getScore(exampleId){
@@ -571,7 +608,7 @@ function selectAllInActiveLevels(){
       selected.forEach(exId => {
         const gp = window.App.State.flat.find(x => `${x.level}_${x.index}` === exId);
         if (!gp) { total += per; return; }
-        const gKey = `${gp.level}_${gp.grammar}`;
+        const gKey = grammarKeyOf(gp);
         const notes = window.App.Notes ? window.App.Notes.getNotes(gKey) : [];
         const usableCount = notes.filter(n => Utils.htmlToText(n.jpHtml || "").length > 0).length;
         total += Math.min(usableCount, per);
@@ -1193,6 +1230,7 @@ function hasSavedSession(){
     rightCount = Number(s.rightCount || 0);
     showingBack = !!s.showingBack;
     awaitingNext = !!s.awaitingNext;
+    pendingRightAdvance = !!s.pendingRightAdvance;
 
     sessionExampleIds = Array.isArray(s.sessionExampleIds) ? s.sessionExampleIds.map(String) : [];
 
@@ -1232,6 +1270,7 @@ function hasSavedSession(){
     wrongGrammarMap = new Map();
     wrongExampleIds = new Set();
     showSession(false);
+    syncShowBackOnRightBtn();
     setSaveButtonState();
   }
 
@@ -1259,7 +1298,7 @@ function hasSavedSession(){
       const gp = window.App.State.flat.find(x => `${x.level}_${x.index}` === exId);
       if (!gp) return;
 
-      const gKey = `${gp.level}_${gp.grammar}`;
+      const gKey = grammarKeyOf(gp);
       const notes = window.App.Notes ? window.App.Notes.getNotes(gKey) : [];
       const usable = notes
         .map(n => ({ jpHtml: n.jpHtml || "", enHtml: n.enHtml || "" }))
@@ -1680,6 +1719,7 @@ cardEl.innerHTML = `
       totalInitial,
       showingBack,
       awaitingNext,
+      pendingRightAdvance,
       wrongGrammar: serializeWrongGrammarMap(),
       wrongExampleIds: Array.from(wrongExampleIds || []).map(String),
       studyLogUndo: extra && extra.studyLogUndo ? extra.studyLogUndo : null
@@ -1932,7 +1972,7 @@ if (showingBack && usableCount > 1){
 
   function markWrong(){
     if (deck.length === 0) return;
-    if (awaitingNext) return;
+    if (awaitingNext || pendingRightAdvance) return;
 
     const studyLogUndo = window.App?.Heatmap?.recordCramActivity?.() || null;
     try{ window.App?.Heatmap?.maybeCelebrateCramGoal?.(Storage.settings.cramDailyGoal || 0); }catch(_e){}
@@ -1960,22 +2000,51 @@ if (showingBack && usableCount > 1){
   }
 
 
-  function markRight(){
-    if (deck.length === 0) return;
-    if (awaitingNext) return;
+function markRight(){
+  if (deck.length === 0) return;
+  if (awaitingNext) return;
 
-    const studyLogUndo = window.App?.Heatmap?.recordCramActivity?.() || null;
-    try{ window.App?.Heatmap?.maybeCelebrateCramGoal?.(Storage.settings.cramDailyGoal || 0); }catch(_e){}
-    pushUndoSnapshot({ studyLogUndo });
-    rightCount++;
-    deck.shift();
+  // If we're in the "hold on back after RIGHT" state, RIGHT acts as NEXT.
+  if (pendingRightAdvance){
+    pendingRightAdvance = false;
+    const removed = deck.shift();
+    if (removed) delete removed._example;
     showingBack = false;
     renderCard();
+    return;
   }
 
+  const studyLogUndo = window.App?.Heatmap?.recordCramActivity?.() || null;
+  try{ window.App?.Heatmap?.maybeCelebrateCramGoal?.(Storage.settings.cramDailyGoal || 0); }catch(_e){}
+  pushUndoSnapshot({ studyLogUndo });
 
-  Cram.refreshIfOpen = () => { if (isOpen){ applySrsUiVisibility();
+  rightCount++;
+
+  // Optional flow: show the back first after RIGHT, then advance on a second press.
+  if (Storage.settings.showBackOnRight && !showingBack){
+    pendingRightAdvance = true;
+    showingBack = true;
+    renderCard();
+    syncActionButtons();
+    return;
+  }
+
+  deck.shift();
+  showingBack = false;
+  renderCard();
+}
+
+
+Cram.refreshIfOpen = () => { if (isOpen){ applySrsUiVisibility();
     updateSrsLevelFilterUI(); buildList(); } };
+function syncShowBackOnRightBtn(){
+  if (!showBackOnRightBtn) return;
+  const on = !!Storage.settings.showBackOnRight;
+  showBackOnRightBtn.classList.toggle("active", on);
+  showBackOnRightBtn.textContent = "Show Card Back";
+}
+
+
 
   Cram.init = () => {
     const openBtn = Utils.qs("#openCramBtn");
@@ -2046,6 +2115,7 @@ if (showingBack && usableCount > 1){
     cardEl = Utils.qs("#cramCard");
     wrongBtn = Utils.qs("#cramWrongBtn");
     rightBtn = Utils.qs("#cramRightBtn");
+    showBackOnRightBtn = Utils.qs("#cramShowBackOnRightBtn");
     nextBtn = Utils.qs("#cramNextBtn");
 
     completeQuitRowEl = Utils.qs("#cramCompleteQuitRow");

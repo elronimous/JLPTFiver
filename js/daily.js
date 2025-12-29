@@ -73,7 +73,7 @@
       indices.forEach(idx=>{
         const item = items[idx];
         const exampleId = `${item.level}_${item.index}`;
-        const grammarKey = `${item.level}_${item.grammar}`;
+        const grammarKey = String(item.key || `${item.level}_${item.index}`);
         const seen = !!Storage.userData.seenExamples[exampleId];
 
         const grammarLink = item.primaryLink

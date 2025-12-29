@@ -22,6 +22,9 @@
     // Load grammar
     await window.App.Csv.load();
 
+    // Fix duplicate grammar titles collapsing SRS/progress keys (old `${level}_${grammar}` -> new `${level}_${index}`)
+    Storage.migrateGrammarKeysToIndexV1 && Storage.migrateGrammarKeysToIndexV1();
+
     // Header easter eggs
     window.App.Invaders && window.App.Invaders.init && window.App.Invaders.init();
 
@@ -57,6 +60,7 @@
 
     const toggleHeatmapVisible = Utils.qs("#toggleHeatmapVisible");
     const toggleHideEnglishNotes = Utils.qs("#toggleHideEnglishNotes");
+    const toggleCleanExampleFormatting = Utils.qs("#toggleCleanExampleFormatting");
     const toggleEmojiScores = Utils.qs("#toggleEmojiScores");
     const toggleSrsEnabled = Utils.qs("#toggleSrsEnabled");
 
@@ -217,6 +221,7 @@
 
 // Apply initial settings UI
     toggleHideEnglishNotes.checked = !!Storage.settings.hideEnglishDefault;
+    if (toggleCleanExampleFormatting) toggleCleanExampleFormatting.checked = !!Storage.settings.cleanExampleFormatting;
     toggleEmojiScores.checked = !!Storage.settings.scoresEnabled;
     if (toggleSrsEnabled) toggleSrsEnabled.checked = !!Storage.settings.srsEnabled;
 
@@ -238,6 +243,39 @@
       Storage.settings.hideEnglishDefault = !!toggleHideEnglishNotes.checked;
       Storage.saveSettings();
     });
+
+    if (toggleCleanExampleFormatting){
+      toggleCleanExampleFormatting.addEventListener("change", ()=>{
+        const wantOn = !!toggleCleanExampleFormatting.checked;
+
+        // Turning ON requires confirmation with an impact count.
+        if (wantOn){
+          let affected = 0;
+          try{ affected = Number(window.App?.Notes?.countExampleFormattingChanges?.() || 0); }catch(_e){ affected = 0; }
+
+          const ok = window.confirm(
+            `${affected} example sentence${affected === 1 ? "" : "s"} will have formatting cleaned (font sizes etc).\n\nHighlights (colour/weight) are kept.\n\nProceed?`
+          );
+
+          if (!ok){
+            // Revert UI + keep setting off.
+            toggleCleanExampleFormatting.checked = false;
+            Storage.settings.cleanExampleFormatting = false;
+            Storage.saveSettings();
+            return;
+          }
+
+          Storage.settings.cleanExampleFormatting = true;
+          Storage.saveSettings();
+          try{ window.App?.Notes?.cleanAllExampleFormatting?.(); }catch(_e){}
+          return;
+        }
+
+        // Turning OFF: no confirmation.
+        Storage.settings.cleanExampleFormatting = false;
+        Storage.saveSettings();
+      });
+    }
 
     toggleEmojiScores.addEventListener("change", ()=>{
       Storage.settings.scoresEnabled = !!toggleEmojiScores.checked;
@@ -363,6 +401,12 @@
       if (exNotes.checked) payload.notesByGrammar = Storage.userData.notesByGrammar;
       if (exScores.checked) payload.scoresByExample = Storage.userData.scoresByExample;
       if (exSrs.checked) payload.srs = Storage.userData.srs;
+      // Include SRS-related extras (progress celebrations, migrations) so backups restore behaviour fully
+      if (exSrs.checked){
+        payload.userDataExtras = payload.userDataExtras || {};
+        if (Storage.userData && Storage.userData.achievements) payload.userDataExtras.achievements = Storage.userData.achievements;
+        if (Storage.userData && Storage.userData.migrations) payload.userDataExtras.migrations = Storage.userData.migrations;
+      }
       if (exSettings.checked) payload.settings = Storage.settings;
 
       if (exUi.checked || exCramLists.checked){
@@ -429,6 +473,7 @@
         const cards = n.srs?.cardsByKey && typeof n.srs.cardsByKey === "object" ? Object.keys(n.srs.cardsByKey).length : 0;
         parts.push(`SRS: ${gk} items / ${cards} cards`);
       }
+      if (inspect.hasUserDataExtras) parts.push("SRS extras: achievements/migrations");
       if (inspect.hasSettings) parts.push(`Settings: ${count(n.settings)} keys`);
       if (inspect.hasUi){
         const hsSnake = Number(n.ui?.snakeHiScore);
@@ -592,6 +637,7 @@
 
       // Update settings UI
       toggleHideEnglishNotes.checked = !!Storage.settings.hideEnglishDefault;
+      if (toggleCleanExampleFormatting) toggleCleanExampleFormatting.checked = !!Storage.settings.cleanExampleFormatting;
       toggleEmojiScores.checked = !!Storage.settings.scoresEnabled;
       toggleProgressiveMode.checked = !!Storage.settings.progressiveEnabled;
       progressiveDatesWrap.hidden = !toggleProgressiveMode.checked;

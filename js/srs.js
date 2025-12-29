@@ -4,6 +4,7 @@
 
   const SRS = {};
   let overlayEl, openBtn, quitBtn;
+  let showBackOnRightBtn;
   let cardEl, wrongBtn, rightBtn, undoBtn, nextBtn;
   let progressEl, scoreEl, flipHintEl;
   let modeGrammarBtn, modeSentencesBtn, examplesPerGrammarInput, examplesAllBtn;
@@ -33,6 +34,7 @@
   const answeredOnceThisSession = new Set();
   let showingBack = false;
   let awaitingNext = false;
+  let pendingRightAdvance = false;
 
   // Keyboard: ArrowRight -> reveal back (if on front), otherwise advance (NEXT/Right).
   let keydownAttached = false;
@@ -43,18 +45,23 @@
     return ae.isContentEditable || tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT";
   }
   function onKeyDown(ev){
-    if (ev.key !== "ArrowRight") return;
-    if (!isOpen) return;
-    if (statsBackdropEl && !statsBackdropEl.hidden) return;
-    if (fsrsBackdropEl && !fsrsBackdropEl.hidden) return;
-    if (isTypingInField()) return;
+  const isArrow = ev.key === "ArrowRight";
+  const isNumpad = (ev.location === 3 && (ev.key === "1" || ev.key === "2" || ev.key === "3"))
+    || (ev.code === "Numpad1" || ev.code === "Numpad2" || ev.code === "Numpad3");
 
-    // Prevent page scroll while the session overlay is open.
-    ev.preventDefault();
+  if (!isArrow && !isNumpad) return;
+  if (!isOpen) return;
+  if (statsBackdropEl && !statsBackdropEl.hidden) return;
+  if (fsrsBackdropEl && !fsrsBackdropEl.hidden) return;
+  if (isTypingInField()) return;
 
-    // If deck is empty, do nothing.
-    if (!Array.isArray(deck) || deck.length === 0) return;
+  // Prevent page scroll while the session overlay is open.
+  ev.preventDefault();
 
+  // If deck is empty, do nothing.
+  if (!Array.isArray(deck) || deck.length === 0) return;
+
+  if (isArrow){
     if (!showingBack){
       showingBack = true;
       renderCard();
@@ -69,8 +76,39 @@
     if (rightBtn && !rightBtn.hidden && !rightBtn.disabled){
       rightBtn.click();
     }
+    return;
   }
-  function attachKeydown(){
+
+  // Numpad hotkeys:
+  // 1 = WRONG (or UNDO if you've already answered this card)
+  // 2 = RIGHT (or switch WRONG -> RIGHT if you've already marked wrong)
+  // 3 = UNDO
+  const k = ev.key || "";
+  const canUndoNow = undoBtn && !undoBtn.disabled;
+
+  if (k === "3"){
+    if (canUndoNow) undoBtn.click();
+    return;
+  }
+
+  if (k === "1"){
+    if ((awaitingNext || pendingRightAdvance) && canUndoNow){
+      undoBtn.click();
+      return;
+    }
+    if (wrongBtn && !wrongBtn.hidden && !wrongBtn.disabled) wrongBtn.click();
+    return;
+  }
+
+  if (k === "2"){
+    if (awaitingNext && canUndoNow){
+      // Switch WRONG -> RIGHT (undo then apply right)
+      undoBtn.click();
+    }
+    if (rightBtn && !rightBtn.hidden && !rightBtn.disabled) rightBtn.click();
+  }
+}
+function attachKeydown(){
     if (keydownAttached) return;
     keydownAttached = true;
     document.addEventListener("keydown", onKeyDown);
@@ -163,7 +201,7 @@ return srs;
     grammarMap = new Map();
     const flat = window.App.State?.flat || [];
     flat.forEach(gp=>{
-      const key = `${gp.level}_${gp.grammar}`;
+      const key = String(gp.key || `${gp.level}_${gp.index}`);
       if (!grammarMap.has(key)) grammarMap.set(key, gp);
     });
     return grammarMap;
@@ -462,6 +500,7 @@ return srs;
       totalInitial,
       showingBack,
       awaitingNext,
+      pendingRightAdvance,
       answeredOnce: Array.from(answeredOnceThisSession || []).map(String),
       reviewUndo: extra && extra.reviewUndo ? extra.reviewUndo : null,
       studyLogUndo: extra && extra.studyLogUndo ? extra.studyLogUndo : null
@@ -540,6 +579,7 @@ return srs;
     totalInitial = Number(s.totalInitial || 0);
     showingBack = !!s.showingBack;
     awaitingNext = !!s.awaitingNext;
+    pendingRightAdvance = !!s.pendingRightAdvance;
 
     answeredOnceThisSession.clear();
     (s.answeredOnce || []).forEach(k => answeredOnceThisSession.add(String(k)));
@@ -1051,22 +1091,32 @@ if (showingBack && usableCount > 1){
       nextBtn.hidden = true;
       return;
     }
-    if (awaitingNext){
-      wrongBtn.hidden = true;
-      rightBtn.hidden = true;
-      nextBtn.hidden = false;
-      nextBtn.disabled = false;
-    } else {
-      wrongBtn.hidden = false;
-      rightBtn.hidden = false;
-      wrongBtn.disabled = false;
-      rightBtn.disabled = false;
-      nextBtn.hidden = true;
-    }
+if (awaitingNext){
+  wrongBtn.hidden = true;
+  rightBtn.hidden = true;
+  nextBtn.hidden = false;
+  nextBtn.disabled = false;
+} else {
+  wrongBtn.hidden = false;
+  rightBtn.hidden = false;
+  nextBtn.hidden = true;
+
+  // If the user chose "show backside on RIGHT", then RIGHT becomes a 2-step flow:
+  // RIGHT -> show back, then RIGHT again (button label changes to NEXT) to advance.
+  if (pendingRightAdvance){
+    wrongBtn.disabled = true;
+    rightBtn.disabled = false;
+    if (rightBtn) rightBtn.textContent = "NEXT";
+  } else {
+    wrongBtn.disabled = false;
+    rightBtn.disabled = false;
+    if (rightBtn) rightBtn.textContent = "RIGHT";
+  }
+}
   }
 
   function markWrong(){
-    if (!deck.length || awaitingNext) return;
+    if (!deck.length || awaitingNext || pendingRightAdvance) return;
     const current = deck[0];
 
     const studyLogUndo = window.App?.Heatmap?.recordSrsActivity?.({ grammarKey: current.grammarKey }) || null;
@@ -1096,23 +1146,16 @@ if (showingBack && usableCount > 1){
     renderCard();
   }
 
-  function markRight(){
-    if (!deck.length || awaitingNext) return;
-    const current = deck[0];
+function markRight(){
+  if (!deck.length || awaitingNext) return;
 
-    const studyLogUndo = window.App?.Heatmap?.recordSrsActivity?.({ grammarKey: current.grammarKey }) || null;
-    const reviewUndo = !answeredOnceThisSession.has(current.grammarKey) ? makeReviewUndo(current.grammarKey) : null;
-    pushUndoSnapshot({ reviewUndo, studyLogUndo });
-
-    // Score should only change once per grammar point, based on the first answer given.
-    if (!answeredOnceThisSession.has(current.grammarKey)){
-      answeredOnceThisSession.add(current.grammarKey);
-      applyReview(current.grammarKey, true);
-    }
-    rightCount++;
+  // If we're in the "hold on back after RIGHT" state, RIGHT acts as NEXT.
+  if (pendingRightAdvance){
+    pendingRightAdvance = false;
     const removed = deck.shift();
     if (removed) delete removed._example;
     showingBack = false;
+
     if (!deck.length){
       setCompletionUI(!!totalInitial);
       renderCompletedCard();
@@ -1121,9 +1164,47 @@ if (showingBack && usableCount > 1){
     } else {
       renderCard();
     }
+    return;
   }
 
-  function applyModeToUi(){
+  const current = deck[0];
+
+  const studyLogUndo = window.App?.Heatmap?.recordSrsActivity?.({ grammarKey: current.grammarKey }) || null;
+  const reviewUndo = !answeredOnceThisSession.has(current.grammarKey) ? makeReviewUndo(current.grammarKey) : null;
+  pushUndoSnapshot({ reviewUndo, studyLogUndo });
+
+  // Score should only change once per grammar point, based on the first answer given.
+  if (!answeredOnceThisSession.has(current.grammarKey)){
+    answeredOnceThisSession.add(current.grammarKey);
+    applyReview(current.grammarKey, true);
+  }
+
+  rightCount++;
+
+  // Optional flow: show the back first after RIGHT, then advance on a second press.
+  if (Storage.settings.showBackOnRight && !showingBack){
+    pendingRightAdvance = true;
+    showingBack = true;
+    renderCard();
+    syncActionButtons();
+    return;
+  }
+
+  const removed = deck.shift();
+  if (removed) delete removed._example;
+  showingBack = false;
+
+  if (!deck.length){
+    setCompletionUI(!!totalInitial);
+    renderCompletedCard();
+    syncActionButtons();
+    updateStats();
+  } else {
+    renderCard();
+  }
+}
+
+function applyModeToUi(){
     const srs = ensureSrsConfig();
     const mode = srs.mode;
     if (modeGrammarBtn){
@@ -1157,6 +1238,8 @@ if (showingBack && usableCount > 1){
     srs.mode = mode;
     Storage.saveUserData();
     applyModeToUi();
+syncShowBackOnRightBtn();
+
     if (isOpen){
       buildDeck();
       renderCard();
@@ -1690,15 +1773,12 @@ if (showingBack && usableCount > 1){
   function getHistoryStats(){
     const srs = ensureSrsConfig();
     const cards = (srs && srs.cardsByKey) ? srs.cardsByKey : {};
-    const activeKeys = Array.isArray(srs.grammarKeys) ? srs.grammarKeys.map(String) : [];
-    const activeSet = new Set(activeKeys);
     let totalReviews = 0;
     let totalLapses = 0;
     let cardsWithHistory = 0;
     let cardsWith3Plus = 0;
 
     Object.keys(cards).forEach(k=>{
-      if (!activeSet.has(String(k))) return;
       const c = cards[k];
       if (!c) return;
       const r = Number(c.reps || 0);
@@ -2021,6 +2101,14 @@ function deleteCurrentHistory(){
   }
 
 
+function syncShowBackOnRightBtn(){
+  if (!showBackOnRightBtn) return;
+  const on = !!Storage.settings.showBackOnRight;
+  showBackOnRightBtn.classList.toggle("active", on);
+  showBackOnRightBtn.textContent = "Show Card Back";
+}
+
+
 
   SRS.init = () => {
     openBtn = document.querySelector("#openSrsBtn");
@@ -2044,6 +2132,7 @@ function deleteCurrentHistory(){
     modeSentencesBtn = document.querySelector("#srsModeSentences");
     examplesPerGrammarInput = document.querySelector("#srsExamplesPerGrammar");
     examplesAllBtn = document.querySelector("#srsExamplesAllBtn");
+    showBackOnRightBtn = document.querySelector("#srsShowBackOnRightBtn");
     statsBtn = document.querySelector("#srsStatsBtn");
     statsBackdropEl = document.querySelector("#srsStatsBackdrop");
     statsCloseBtn = document.querySelector("#srsStatsCloseBtn");
@@ -2130,6 +2219,12 @@ function deleteCurrentHistory(){
     modeSentencesBtn?.addEventListener("click", ()=>setMode("sentences"));
     examplesPerGrammarInput?.addEventListener("change", examplesPerGrammarChanged);
     examplesAllBtn?.addEventListener("click", toggleAllExamples);
+
+    showBackOnRightBtn?.addEventListener("click", ()=>{
+      Storage.settings.showBackOnRight = !Storage.settings.showBackOnRight;
+      Storage.saveSettings();
+      syncShowBackOnRightBtn();
+    });
 
     statsBtn?.addEventListener("click", ()=>{
       // During an active SRS session, "Stats" should open the per-item Modify SRS window
