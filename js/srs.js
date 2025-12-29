@@ -1690,12 +1690,15 @@ if (showingBack && usableCount > 1){
   function getHistoryStats(){
     const srs = ensureSrsConfig();
     const cards = (srs && srs.cardsByKey) ? srs.cardsByKey : {};
+    const activeKeys = Array.isArray(srs.grammarKeys) ? srs.grammarKeys.map(String) : [];
+    const activeSet = new Set(activeKeys);
     let totalReviews = 0;
     let totalLapses = 0;
     let cardsWithHistory = 0;
     let cardsWith3Plus = 0;
 
     Object.keys(cards).forEach(k=>{
+      if (!activeSet.has(String(k))) return;
       const c = cards[k];
       if (!c) return;
       const r = Number(c.reps || 0);

@@ -9,7 +9,7 @@ N5,8,の,no,Indicates possession,https://bunpro.jp/grammar_points/%E3%81%AE
 N5,9,いい,ii,い-Adjective meaning 'good',https://bunpro.jp/grammar_points/%E3%81%84%E3%81%84
 N5,10,い-Adjectives,i-adjectives,Adjectives ending in い,https://bunpro.jp/grammar_points/%E3%81%84-adjectives
 N5,11,な-Adjectives,na-adjectives,Adjectives that are also nouns,https://bunpro.jp/grammar_points/%E3%81%AA-adjectives
-N5,12,か ①,ka,Question marking particle,https://bunpro.jp/grammar_points/%E3%81%8B
+N5,12,か,ka,Question marking particle,https://bunpro.jp/grammar_points/%E3%81%8B
 N5,13,が,ga,"Subject marking particle, Identification particle",https://bunpro.jp/grammar_points/%E3%81%8C
 N5,14,よ,yo,Emphasis (Sentence ending particle),https://bunpro.jp/grammar_points/%E3%82%88
 N5,15,ね,ne,"Isn't it?, Right? (Sentence ending particle)",https://bunpro.jp/grammar_points/%E3%81%AD
@@ -24,7 +24,7 @@ N5,23,そこ,soko,"There, That place",https://bunpro.jp/grammar_points/%E3%81%9D
 N5,24,あそこ,asoko,Over there,https://bunpro.jp/grammar_points/%E3%81%82%E3%81%9D%E3%81%93
 N5,25,で,de,"At, In",https://bunpro.jp/grammar_points/%E3%81%A7
 N5,26,に,ni,"In, At, To, For, On",https://bunpro.jp/grammar_points/%E3%81%AB
-N5,27,か ②,ka,Or,https://bunpro.jp/grammar_points/%E3%81%8B-or
+N5,27,か,ka,Or,https://bunpro.jp/grammar_points/%E3%81%8B-or
 N5,28,と,to,With,https://bunpro.jp/grammar_points/%E3%81%A8-with
 N5,29,でしょう,deshou,"Right?, Probably, Isn't it?",https://bunpro.jp/grammar_points/%E3%81%A7%E3%81%97%E3%82%87%E3%81%86
 N5,30,だろう,darou,"Right?, Probably, Isn't it?",https://bunpro.jp/grammar_points/%E3%81%A0%E3%82%8D%E3%81%86
@@ -78,7 +78,7 @@ N5,77,どれ,dore,Which (of three or more),https://bunpro.jp/grammar_points/%E3%
 N5,78,どこ,doko,Where,https://bunpro.jp/grammar_points/%E3%81%A9%E3%81%93
 N5,79,どの,dono,"Which (of three or more), What (kind)",https://bunpro.jp/grammar_points/%E3%81%A9%E3%81%AE
 N5,80,ている②,te iru (2),"State of being, Has (have) done",https://bunpro.jp/grammar_points/%E3%81%A6%E3%81%84%E3%82%8B2
-N5,81,てら,tekara,"Once...is done, Once...happens, After doing",https://bunpro.jp/grammar_points/%E3%81%A6%E3%81%8B%E3%82%89
+N5,81,てから,tekara,"Once...is done, Once...happens, After doing",https://bunpro.jp/grammar_points/%E3%81%A6%E3%81%8B%E3%82%89
 N5,82,Verb + て+ B,verb + te + B,"And, And then, After that (sequence)",https://bunpro.jp/grammar_points/verb-%E3%81%A6-b
 N5,83,もう,mou,"Already, Anymore",https://bunpro.jp/grammar_points/%E3%82%82%E3%81%86
 N5,84,まだ,mada,"Still, Not yet",https://bunpro.jp/grammar_points/%E3%81%BE%E3%81%A0
@@ -913,8 +913,6 @@ N1,177,こそすれ〜ない,koso sure ~ nai,"And certainly not, But certainly n
 N1,178,並み,nami,"As, On par with, Worthy of",https://bunpro.jp/grammar_points/%E4%B8%A6%E3%81%BF
 N1,179,に先駆けて,ni sakigakete,"First, Prior to, Pioneer, Ahead of",https://bunpro.jp/grammar_points/%E3%81%AB%E5%85%88%E9%A7%86%E3%81%91%E3%81%A6
 N1,180,を機に,o ki ni,"Opportunity, Occasion",https://bunpro.jp/grammar_points/%E3%82%92%E6%A9%9F%E3%81%AB
-
-
 
 
 
