@@ -73,7 +73,7 @@
   let customListSelectEl, customListNameEl, loadCustomListBtn, addToCustomListBtn, deleteCustomListBtn, saveNewCustomListBtn, customListHintEl;
   let levelFiltersEl;
   let selectTodayBtn, deselectAllBtn, selectLevelsBtn, selectMatchesBtn;
-  let scoreMinEl, scoreMaxEl, itemsPerGrammarEl;
+  let scoreMinEl, scoreMaxEl, itemsPerGrammarEl, dailyGoalEl;
   let scoreRangeGroupEl, srsFilterGroupEl;
   let starBtns;
   let cramSrsBtns, cramSrsLevelBtns, cramSrsMode = "any";
@@ -1935,6 +1935,7 @@ if (showingBack && usableCount > 1){
     if (awaitingNext) return;
 
     const studyLogUndo = window.App?.Heatmap?.recordCramActivity?.() || null;
+    try{ window.App?.Heatmap?.maybeCelebrateCramGoal?.(Storage.settings.cramDailyGoal || 0); }catch(_e){}
     pushUndoSnapshot({ studyLogUndo });
 
     // Step 1: reveal the back, then wait for NEXT to advance/reinsert.
@@ -1964,6 +1965,7 @@ if (showingBack && usableCount > 1){
     if (awaitingNext) return;
 
     const studyLogUndo = window.App?.Heatmap?.recordCramActivity?.() || null;
+    try{ window.App?.Heatmap?.maybeCelebrateCramGoal?.(Storage.settings.cramDailyGoal || 0); }catch(_e){}
     pushUndoSnapshot({ studyLogUndo });
     rightCount++;
     deck.shift();
@@ -2000,6 +2002,22 @@ if (showingBack && usableCount > 1){
     scoreMinEl = Utils.qs("#cramScoreMin");
     scoreMaxEl = Utils.qs("#cramScoreMax");
     itemsPerGrammarEl = Utils.qs("#cramItemsPerGrammar");
+
+    dailyGoalEl = Utils.qs("#cramDailyGoal");
+    if (dailyGoalEl){
+      const cur = Number(Storage.settings.cramDailyGoal || 0);
+      dailyGoalEl.value = String(Number.isFinite(cur) ? Math.max(0, Math.min(9999, Math.floor(cur))) : 0);
+
+      const saveDailyGoal = ()=>{
+        const n = Number(dailyGoalEl.value);
+        const v = Number.isFinite(n) ? Math.max(0, Math.min(9999, Math.floor(n))) : 0;
+        dailyGoalEl.value = String(v);
+        Storage.settings.cramDailyGoal = v;
+        Storage.saveSettings();
+      };
+      dailyGoalEl.addEventListener("change", saveDailyGoal);
+      dailyGoalEl.addEventListener("blur", saveDailyGoal);
+    }
 
     // SRS difficulty filter controls
     srsDiffBtn = Utils.qs("#cramSrsDifficultyBtn");

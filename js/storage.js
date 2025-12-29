@@ -37,7 +37,9 @@
     progressiveEnabled: false,
     progressiveStartByLevel: {}, // level -> "YYYY-MM-DD"
     srsEnabled: false,
-    cardFontScale: 1
+    cardFontScale: 1,
+    // CRAM
+    cramDailyGoal: 0 // 0 = off
   };
 
   // User data
@@ -125,6 +127,10 @@
     if (typeof Storage.settings.cardFontScale !== "number" || !Number.isFinite(Storage.settings.cardFontScale)){
       Storage.settings.cardFontScale = 1;
     }
+
+    // CRAM daily goal (0 = off)
+    const dg = Number(Storage.settings.cramDailyGoal);
+    Storage.settings.cramDailyGoal = (Number.isFinite(dg) ? Math.max(0, Math.min(9999, Math.floor(dg))) : 0);
 
     // Cram custom lists (UI)
     if (!Storage.ui.cramLists || typeof Storage.ui.cramLists !== "object") Storage.ui.cramLists = {};

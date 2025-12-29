@@ -82,7 +82,9 @@
     // Per-day study totals used for tooltips + monthly charts.
     // Shape: { [ymd]: { srsSentences:number, crammed:number, srsGrammarKeys:{[grammarKey]:true} } }
     dayStats: {},
-    goals: [] // [{id, ymd, emoji, text}]
+    goals: [], // [{id, ymd, emoji, text}]
+    // Track which dates have already played the CRAM daily-goal celebration (so it only triggers once per day).
+    cramGoalFiredDays: {}
   };
 function stopGoalEmojiCycler(){
   if (goalCycleTimer) clearInterval(goalCycleTimer);
@@ -128,6 +130,7 @@ function startGoalEmojiCycler(){
         if (!state.dayStats || typeof state.dayStats !== "object") state.dayStats = {};
         if (!Array.isArray(state.goals)) state.goals = [];
         if (typeof state.visible !== "boolean") state.visible = true;
+        if (!state.cramGoalFiredDays || typeof state.cramGoalFiredDays !== "object") state.cramGoalFiredDays = {};
       }
     }catch{}
   }
@@ -293,6 +296,134 @@ function startGoalEmojiCycler(){
     }
   };
 
+  // ------------------------
+  // CRAM daily goal celebration
+  // ------------------------
+  let fireworksOnlyActive = false;
+  let fireworksPointerHandler = null;
+  let fireworksKeyHandler = null;
+
+  function launchClickFireworks(clientX, clientY){
+    try{
+      if (!snakeFireCtx) return;
+      const x = Math.max(0, Math.min(window.innerWidth, Number(clientX) || 0));
+      const y = Math.max(0, Math.min(window.innerHeight, Number(clientY) || 0));
+      const hue = Math.floor(Math.random()*360);
+
+      // Launch a rocket that *explodes at the click destination* (no instant burst on click).
+      const h = Math.max(1, window.innerHeight);
+      const dist = Math.max(60, Math.min(h*0.8, h - y));
+      const vy = -(340 + Math.random()*260) * (0.85 + (dist / h) * 0.35);
+
+      snakeFireRockets.push({
+        x,
+        y: h + 10,
+        vx: (Math.random()-0.5) * 70,
+        vy,
+        hue,
+        apex: Math.max(40, y),
+        ttl: 2.2,
+
+        // Wobble params (makes the projectile feel a bit less "laser straight")
+        wobT: 0,
+        wobPhase: Math.random() * Math.PI * 2,
+        wobFreq: 6 + Math.random() * 6,
+        wobAmp: 10 + Math.random() * 12
+      });
+
+      // Keep arrays bounded so heavy clicking can't degrade performance.
+      if (snakeFireSparks.length > 2400) snakeFireSparks.splice(0, snakeFireSparks.length - 2400);
+      if (snakeFireRockets.length > 10) snakeFireRockets.splice(0, snakeFireRockets.length - 10);
+    }catch(_e){}
+  }
+
+  function startFireworksOverlay(message){
+    // Don't interrupt an active snake run/countdown
+    if (snakeActive || snakeCountdownActive) return false;
+
+    ensureSnakeOverlay();
+    showSnakeOverlay();
+
+    fireworksOnlyActive = true;
+
+    if (snakeOverlay){
+      snakeOverlay.classList.add("win");
+      snakeOverlay.classList.add("hm-fireworks-only");
+    }
+    if (snakeQuitBtn){
+      snakeQuitBtn.textContent = "QUIT";
+      try{ snakeQuitBtn.setAttribute("aria-label", "Exit fireworks"); }catch{}
+    }
+    const congrats = snakeOverlay?.querySelector?.(".hm-fireworks-congrats");
+    if (congrats) congrats.textContent = String(message || "Congratulations! 🎉");
+
+    startSnakeFireworks();
+
+    // Enable click-to-fire while fireworks are showing.
+    if (!fireworksPointerHandler){
+      fireworksPointerHandler = (ev)=>{
+        if (!fireworksOnlyActive) return;
+        // Support both mouse + touch
+        const cx = (ev.touches && ev.touches[0]) ? ev.touches[0].clientX : ev.clientX;
+        const cy = (ev.touches && ev.touches[0]) ? ev.touches[0].clientY : ev.clientY;
+        launchClickFireworks(cx, cy);
+      };
+    }
+    try{ snakeFireCanvas?.addEventListener("pointerdown", fireworksPointerHandler); }catch{}
+
+    // Allow ESC to exit fireworks-only mode
+    if (!fireworksKeyHandler){
+      fireworksKeyHandler = (ev)=>{
+        if (!fireworksOnlyActive) return;
+        if (ev.key === "Escape"){
+          ev.preventDefault();
+          ev.stopPropagation();
+          stopFireworksOverlay();
+        }
+      };
+    }
+    try{ document.addEventListener("keydown", fireworksKeyHandler, true); }catch{}
+
+    return true;
+  }
+
+  function stopFireworksOverlay(){
+    fireworksOnlyActive = false;
+    try{ snakeFireCanvas?.removeEventListener("pointerdown", fireworksPointerHandler); }catch{}
+    try{ document.removeEventListener("keydown", fireworksKeyHandler, true); }catch{}
+    try{ stopSnakeFireworks(); }catch{}
+    try{
+      if (snakeOverlay){
+        snakeOverlay.classList.remove("win");
+        snakeOverlay.classList.remove("hm-fireworks-only");
+      }
+    }catch{}
+    if (snakeQuitBtn){
+      snakeQuitBtn.textContent = "QUIT";
+      try{ snakeQuitBtn.setAttribute("aria-label", "Quit"); }catch{}
+    }
+    const congrats = snakeOverlay?.querySelector?.(".hm-fireworks-congrats");
+    if (congrats) congrats.textContent = "";
+    try{ hideSnakeOverlay(); }catch{}
+  }
+
+  // Public: call after incrementing CRAM activity. Triggers once per day when count >= goal.
+  Heatmap.maybeCelebrateCramGoal = (goal) => {
+    const g = Number(goal);
+    if (!Number.isFinite(g) || g <= 0) return false;
+
+    const ymd = Utils.dateToYMD(new Date());
+    if (!state.cramGoalFiredDays || typeof state.cramGoalFiredDays !== "object") state.cramGoalFiredDays = {};
+    if (state.cramGoalFiredDays[ymd]) return false;
+
+    const crammed = Number(state.dayStats?.[ymd]?.crammed || 0);
+    if (!Number.isFinite(crammed) || crammed < g) return false;
+
+    state.cramGoalFiredDays[ymd] = true;
+    save();
+    return startFireworksOverlay("Congratulations! Daily goal reached 🎉 — click anywhere for more fireworks.");
+  };
+
   Heatmap.applyStudyUndo = applyStudyUndo;
 
   // ------------------------
@@ -320,6 +451,7 @@ function startGoalEmojiCycler(){
       <div class="hm-snake-center-main">3</div>
       <div class="hm-snake-center-sub"></div>
     </div>
+    <div class="hm-fireworks-congrats" aria-live="polite"></div>
   `;
 
   document.body.appendChild(snakeOverlay);
@@ -332,7 +464,10 @@ function startGoalEmojiCycler(){
   snakeCenterEl = snakeOverlay.querySelector(".hm-snake-center-main");
   snakeSubEl = snakeOverlay.querySelector(".hm-snake-center-sub");
 
-  snakeQuitBtn.addEventListener("click", ()=>stopSnakeGame());
+  snakeQuitBtn.addEventListener("click", ()=>{
+    if (snakeOverlay?.classList?.contains?.("hm-fireworks-only")) return stopFireworksOverlay();
+    return stopSnakeGame();
+  });
   snakeQuitBtn.addEventListener("contextmenu", (ev)=>{ ev.preventDefault(); });
 }
 
@@ -468,7 +603,12 @@ function startGoalEmojiCycler(){
     const vy = -(320 + Math.random()*260);
     const hue = Math.floor(Math.random()*360);
     const apex = (h*0.18) + Math.random()*(h*0.35);
-    return { x, y, vx, vy, hue, apex, ttl: burst ? 1.8 : 2.6 };
+    return { x, y, vx, vy, hue, apex, ttl: burst ? 1.8 : 2.6,
+      wobT: 0,
+      wobPhase: Math.random() * Math.PI * 2,
+      wobFreq: 6 + Math.random() * 6,
+      wobAmp: 10 + Math.random() * 12
+    };
   }
 
   function explodeSnakeRocket(r){
@@ -506,6 +646,40 @@ function startGoalEmojiCycler(){
       const r = snakeFireRockets[i];
       r.ttl -= dt;
       r.vy += g * dt * 0.12;
+
+      // Add wobble + gentle deceleration as the rocket approaches its destination.
+      const frame = dt * 60;
+
+      // Backfill wobble params for older rockets (or future callers) safely.
+      if (r.wobT == null){
+        r.wobT = 0;
+        r.wobPhase = Math.random() * Math.PI * 2;
+        r.wobFreq = 6 + Math.random() * 6;
+        r.wobAmp = 10 + Math.random() * 12;
+      }
+
+      r.wobT += dt;
+      const wob = Math.sin(r.wobT * r.wobFreq + r.wobPhase);
+      const wobAccel = (35 + (r.wobAmp || 12) * 3);
+
+      // Wobble + a touch of random drift so it doesn't look too perfect.
+      r.vx += wob * wobAccel * dt;
+      r.vx += (Math.random()-0.5) * 18 * dt;
+
+      // Ease-out near the apex so it feels like it "hangs" for a moment before the burst.
+      const dy = r.y - r.apex; // distance remaining to destination (px)
+      if (dy < 180 && r.vy < 0){
+        const t = 1 - (dy / 180); // 0 far -> 1 close
+        const dampVY = Math.max(0.55, 1 - t * 0.05 * frame);
+        const dampVX = Math.max(0.60, 1 - t * 0.04 * frame);
+        r.vy *= dampVY;
+        r.vx *= dampVX;
+      }
+
+      // Clamp sideways speed so heavy wobble never gets silly.
+      if (r.vx > 140) r.vx = 140;
+      else if (r.vx < -140) r.vx = -140;
+
       r.x += r.vx * dt;
       r.y += r.vy * dt;
 
@@ -1542,6 +1716,7 @@ function startGoalEmojiCycler(){
     if (!state.dayStats || typeof state.dayStats !== "object") state.dayStats = {};
     if (!Array.isArray(state.goals)) state.goals = [];
     if (typeof state.visible !== "boolean") state.visible = true;
+    if (!state.cramGoalFiredDays || typeof state.cramGoalFiredDays !== "object") state.cramGoalFiredDays = {};
     save();
 
     applyPalette();

@@ -33,6 +33,7 @@
     window.App.ViewAll?.init();
     window.App.Cram?.init();
     window.App.SRS?.init();
+    window.App.Progress?.init();
 
     // Heatmap init (and global alias usage)
     if (window.Heatmap) Heatmap.init();
