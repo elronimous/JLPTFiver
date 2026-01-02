@@ -731,7 +731,9 @@ body.no-scores .score-wrap{display:none !important;}
 .cram-back .desc{color:rgba(148,163,184,.95);max-width:560px;line-height:1.45}
 .cram-actions{display:flex;gap:.6rem;flex-wrap:wrap}
 .cram-action{
-  min-width:160px;
+  /* Make action buttons size consistently (front + back). */
+  flex:1 1 160px;
+  min-width:0;
   padding:.7rem 1rem;
   border-radius:999px;
   border:1px solid rgba(148,163,184,.35);
@@ -741,6 +743,8 @@ body.no-scores .score-wrap{display:none !important;}
   font-weight:950;
   letter-spacing:.12em;
 }
+.cram-action.undo{border-color:rgba(148,163,184,.55);white-space:nowrap}
+.cram-action.reveal{text-align:center}
 .cram-action.wrong{border-color:rgba(239,68,68,.55)}
 .cram-action.right{border-color:rgba(34,197,94,.55)}
 .cram-action.next{border-color:rgba(56,189,248,.55)}

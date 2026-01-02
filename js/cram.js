@@ -87,7 +87,7 @@
   let srsDiffEnabled = false;
   let prevSrsModeBeforeDiff = "any";
 
-  let overlayEl, quitBtn, saveBtn, cardEl, wrongBtn, rightBtn, undoBtn, nextBtn, progressEl, scoreEl;
+  let overlayEl, quitBtn, saveBtn, cardEl, revealBtn, wrongBtn, rightBtn, undoBtn, nextBtn, progressEl, scoreEl;
   let completeQuitRowEl, completeQuitBtnEl;
   let flipHintEl;
 
@@ -1780,7 +1780,11 @@ cardEl.innerHTML = `
 
     const done = deck.length === 0;
 
+    // Session complete: lock everything.
     if (done){
+      if (revealBtn){ revealBtn.hidden = true; revealBtn.disabled = true; }
+      if (undoBtn){ undoBtn.hidden = true; undoBtn.disabled = true; }
+
       wrongBtn.hidden = false;
       rightBtn.hidden = false;
       nextBtn.hidden = true;
@@ -1791,7 +1795,11 @@ cardEl.innerHTML = `
       return;
     }
 
+    // After marking WRONG we show NEXT.
     if (awaitingNext){
+      if (revealBtn){ revealBtn.hidden = true; revealBtn.disabled = true; }
+      if (undoBtn){ undoBtn.hidden = true; }
+
       wrongBtn.hidden = true;
       rightBtn.hidden = true;
       nextBtn.hidden = false;
@@ -1799,15 +1807,45 @@ cardEl.innerHTML = `
       wrongBtn.disabled = true;
       rightBtn.disabled = true;
       nextBtn.disabled = false;
-    } else {
-      wrongBtn.hidden = false;
-      rightBtn.hidden = false;
+      return;
+    }
+
+    // Front: UNDO + REVEAL. Back: WRONG + RIGHT.
+    if (!showingBack){
+      if (undoBtn){ undoBtn.hidden = false; }
+      if (revealBtn){ revealBtn.hidden = false; revealBtn.disabled = false; }
+
+      if (rightBtn) rightBtn.textContent = "RIGHT";
+
+      wrongBtn.hidden = true;
+      rightBtn.hidden = true;
       nextBtn.hidden = true;
 
+      wrongBtn.disabled = true;
+      rightBtn.disabled = true;
+      nextBtn.disabled = true;
+      return;
+    }
+
+    // Back
+    if (undoBtn){ undoBtn.hidden = true; }
+    if (revealBtn){ revealBtn.hidden = true; revealBtn.disabled = true; }
+
+    wrongBtn.hidden = false;
+    rightBtn.hidden = false;
+    nextBtn.hidden = true;
+
+    // Optional flow: RIGHT becomes a 2-step advance (label changes to NEXT).
+    if (pendingRightAdvance){
+      wrongBtn.disabled = true;
+      rightBtn.disabled = false;
+      if (rightBtn) rightBtn.textContent = "NEXT";
+    } else {
       wrongBtn.disabled = false;
       rightBtn.disabled = false;
-      nextBtn.disabled = true;
+      if (rightBtn) rightBtn.textContent = "RIGHT";
     }
+    nextBtn.disabled = true;
   }
 function stepBackExampleCram(card, dir){
   if (!card || !card.gp) return;
@@ -2113,6 +2151,7 @@ function syncShowBackOnRightBtn(){
     quitBtn = Utils.qs("#cramQuitBtn");
     saveBtn = Utils.qs("#cramSaveBtn");
     cardEl = Utils.qs("#cramCard");
+    revealBtn = Utils.qs("#cramRevealBtn");
     wrongBtn = Utils.qs("#cramWrongBtn");
     rightBtn = Utils.qs("#cramRightBtn");
     showBackOnRightBtn = Utils.qs("#cramShowBackOnRightBtn");
@@ -2386,11 +2425,25 @@ function onSrsDiffInput(){
 
     completeQuitBtnEl?.addEventListener("click", quitSession);
 
+    revealBtn?.addEventListener("click", () => {
+      if (deck.length === 0) return;
+      if (showingBack) return;
+      showingBack = true;
+      renderCard();
+    });
+
     wrongBtn?.addEventListener("click", markWrong);
     rightBtn?.addEventListener("click", markRight);
     nextBtn?.addEventListener("click", nextAfterWrong);
 
     undoBtn?.addEventListener("click", undoLast);
+
+    syncShowBackOnRightBtn();
+    showBackOnRightBtn?.addEventListener("click", ()=>{
+      Storage.settings.showBackOnRight = !Storage.settings.showBackOnRight;
+      Storage.saveSettings();
+      syncShowBackOnRightBtn();
+    });
 
     refreshSelectedCount();
   };

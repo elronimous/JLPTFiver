@@ -99,6 +99,17 @@ body{
   background:radial-gradient(circle at top,#0f172a 0%,#020617 65%);
   transform:translateY(-.5px);
 }
+.chip-btn:disabled{
+  opacity:.35;
+  cursor:not-allowed;
+  transform:none;
+}
+.chip-btn:disabled:hover{
+  border-color:rgba(148,163,184,.65);
+  background:radial-gradient(circle at top,#1d283a 0%,#020617 65%);
+  transform:none;
+}
+
 .hidden-date-input{position:absolute;opacity:0;pointer-events:none;width:0;height:0}
 .settings-gear-btn{
   border-radius:999px;border:1px solid rgba(148,163,184,.65);
@@ -1257,6 +1268,19 @@ body.snake-mode #heatmapPanel{
 .cram-session-top{
   display:flex;align-items:center;justify-content:space-between;gap:.75rem;flex-wrap:wrap;
 }
+#cramSessionOverlay .cram-session-top{align-items:flex-start}
+
+.cram-session-left{
+  display:flex;
+  flex-direction:column;
+  gap:.55rem;
+  align-items:flex-start;
+}
+.cram-cardflow{
+  display:flex;
+  flex-direction:column;
+  gap:.25rem;
+}
 .cram-session-actions{display:flex;gap:.5rem;align-items:center;justify-content:flex-end;flex-wrap:wrap}
 .cram-session-stats{display:flex;gap:.75rem;flex-wrap:wrap}
 .cram-session-stat{
@@ -1379,9 +1403,11 @@ body.snake-mode #heatmapPanel{
 .cram-back .en{font-size:1.05rem;color:rgba(229,231,235,.92);line-height:1.45;overflow-wrap:normal;word-break:normal;line-break:auto;hyphens:none}
 .cram-back .gp{font-weight:950;letter-spacing:.06em;text-transform:uppercase;overflow-wrap:anywhere;word-break:break-word;line-break:anywhere}
 .cram-back .desc{color:rgba(148,163,184,.95);max-width:560px;line-height:1.45;overflow-wrap:normal;word-break:normal;line-break:auto;hyphens:none}
-.cram-actions{display:flex;gap:.6rem;flex-wrap:wrap}
+.cram-actions{display:flex;gap:.6rem;flex-wrap:wrap;width:min(720px, 92vw)}
 .cram-action{
-  min-width:160px;
+  /* Make action buttons size consistently (front + back). */
+  flex:1 1 calc(50% - .3rem);
+  min-width:0;
   padding:.7rem 1rem;
   border-radius:999px;
   border:1px solid rgba(148,163,184,.35);
@@ -1393,8 +1419,8 @@ body.snake-mode #heatmapPanel{
 }
 .cram-action.wrong{border-color:rgba(239,68,68,.55)}
 .cram-action.right{border-color:rgba(34,197,94,.55)}
-.cram-action.next{border-color:rgba(56,189,248,.55)}
-.cram-action.undo{border-color:rgba(148,163,184,.55);min-width:120px;letter-spacing:.1em}
+.cram-action.next{border-color:rgba(56,189,248,.55);flex:1 1 100%}
+.cram-action.undo{border-color:rgba(148,163,184,.55);white-space:nowrap}
 .cram-action:disabled{opacity:.3;cursor:not-allowed}
 
 /* Flashcards: make the grammar-point link follow the JLPT level colour */
@@ -1564,6 +1590,10 @@ body.snake-mode #heatmapPanel{
   color:#e0f2fe;
 }
 .srs-count-group.disabled{
+  opacity:.4;
+}
+
+.srs-mode-group.disabled{
   opacity:.4;
 }
 #srsExamplesPerGrammar{

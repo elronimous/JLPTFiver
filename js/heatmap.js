@@ -138,9 +138,9 @@
   let snakeDirQueue = []; // queued direction inputs (max 2) applied one per tick
   let snakeCols = 0;
   let snakeRows = 7;
-  let snakeTargetIdx = -1;
-  let snakeTargetEl = null;
-  let snakeTargetCellIdx = -1;
+  let snakeTargets = [];      // [{ idx, el }]
+  let snakeTargetSet = new Set();
+  let snakeSpawnTimer = null;
   let snakeScore = 0;
   let snakeGameOver = false;
 
@@ -202,6 +202,8 @@ function startGoalEmojiCycler(){
       const parsed = JSON.parse(raw);
       if (parsed && typeof parsed === "object"){
         state = { ...state, ...parsed };
+        // Always start Study Log on the current year (do not persist last viewed year)
+        state.viewYear = new Date().getFullYear();
         if (!state.visitedDays || typeof state.visitedDays !== "object") state.visitedDays = {};
         if (!state.dayStats || typeof state.dayStats !== "object") state.dayStats = {};
         if (!Array.isArray(state.goals)) state.goals = [];
@@ -882,58 +884,69 @@ function startGoalEmojiCycler(){
   }
 
   function clearSnakeVisuals(cells){
-    (snake||[]).forEach(idx=>{
-      const el = cells[idx];
-      if (!el) return;
-      el.classList.remove("snake", "snake-head");
+  (snake||[]).forEach(idx=>{
+    const el = cells[idx];
+    if (!el) return;
+    el.classList.remove("snake", "snake-head");
+  });
+  snake = [];
+  snakeSet = new Set();
+
+  clearSnakeTargets(cells);
+}
+
+
+  function clearSnakeTargets(cells){
+  // Remove all target DOM elements and classes
+  try{
+    (snakeTargets||[]).forEach(t=>{
+      const cell = cells && cells[t.idx];
+      if (cell) cell.classList.remove("snake-target-cell");
+      if (t.el && t.el.parentNode) t.el.parentNode.removeChild(t.el);
     });
-    snake = [];
-    snakeSet = new Set();
+  }catch{}
+  snakeTargets = [];
+  snakeTargetSet = new Set();
+}
 
-    if (snakeTargetEl && snakeTargetEl.parentNode) snakeTargetEl.parentNode.removeChild(snakeTargetEl);
-    snakeTargetEl = null;
-    snakeTargetIdx = -1;
+function placeSnakeTarget(cells){
+  // Spawn ONE new target if there is room (max 5 on screen)
+  if (!cells || !cells.length) return;
+  if ((snakeTargets?.length || 0) >= 5) return;
 
-    // Clear target cell marker
-    if (snakeTargetCellIdx >= 0 && cells[snakeTargetCellIdx]){
-      cells[snakeTargetCellIdx].classList.remove("snake-target-cell");
-    }
-    snakeTargetCellIdx = -1;
+  const inYear = [];
+  for (let i=0;i<cells.length;i++){
+    if (cells[i]?.dataset?.inyear === "1") inYear.push(i);
   }
 
-  function placeSnakeTarget(cells){
-    if (snakeTargetEl && snakeTargetEl.parentNode) snakeTargetEl.parentNode.removeChild(snakeTargetEl);
-    snakeTargetEl = null;
-    snakeTargetIdx = -1;
-
-    if (snakeTargetCellIdx >= 0 && cells[snakeTargetCellIdx]){
-      cells[snakeTargetCellIdx].classList.remove("snake-target-cell");
-    }
-    snakeTargetCellIdx = -1;
-
-    const inYear = [];
-    for (let i=0;i<cells.length;i++){
-      if (cells[i]?.dataset?.inyear === "1") inYear.push(i);
-    }
-    const candidates = inYear.filter(i=>!snakeSet.has(i));
-    if (!candidates.length){
+  const candidates = inYear.filter(i=>!snakeSet.has(i) && !snakeTargetSet.has(i));
+  if (!candidates.length){
+    // If the snake already fills all in-year cells, this is a win.
+    if (snakeSet.size >= inYear.length && inYear.length){
       snakeGameOver = true;
       if (snakeTickTimer) clearInterval(snakeTickTimer);
       snakeTickTimer = null;
+      if (snakeSpawnTimer) clearInterval(snakeSpawnTimer);
+      snakeSpawnTimer = null;
       snakeOverlay?.classList.add("gameover");
       snakeCenterEl.textContent = "YOU WIN";
       snakeSubEl.textContent = "Press R to restart, or QUIT.";
-      return;
     }
-
-    snakeTargetIdx = candidates[Math.floor(Math.random() * candidates.length)];
-    snakeTargetCellIdx = snakeTargetIdx;
-    snakeTargetEl = document.createElement("div");
-    snakeTargetEl.className = "hm-snake-target";
-    snakeTargetEl.textContent = SNAKE_TARGET_EMOJIS[Math.floor(Math.random() * SNAKE_TARGET_EMOJIS.length)];
-    try { cells[snakeTargetIdx]?.classList.add("snake-target-cell"); } catch {}
-    cells[snakeTargetIdx].appendChild(snakeTargetEl);
+    return;
   }
+
+  const idx = candidates[Math.floor(Math.random() * candidates.length)];
+  const el = document.createElement("div");
+  el.className = "hm-snake-target";
+  el.textContent = SNAKE_TARGET_EMOJIS[Math.floor(Math.random() * SNAKE_TARGET_EMOJIS.length)];
+
+  try { cells[idx]?.classList.add("snake-target-cell"); } catch {}
+  cells[idx]?.appendChild(el);
+
+  snakeTargets.push({ idx, el });
+  snakeTargetSet.add(idx);
+}
+
 
   function snakeEatPop(cell){
     if (!cell) return;
@@ -1068,7 +1081,7 @@ function startGoalEmojiCycler(){
     const nextIdx = nextCol * snakeRows + nextRow;
 
     const tailIdx = snake[snake.length-1];
-    const willEat = (nextIdx === snakeTargetIdx);
+    const willEat = snakeTargetSet.has(nextIdx);
 
     // Self-collision (tail is allowed if it's moving away this tick)
     if (snakeSet.has(nextIdx) && !(!willEat && nextIdx === tailIdx)){
@@ -1113,10 +1126,8 @@ function startGoalEmojiCycler(){
         if (snakeTickTimer) clearInterval(snakeTickTimer);
         snakeTickTimer = null;
 
-        // Remove remaining target if any
-        try{ if (snakeTargetEl && snakeTargetEl.parentNode) snakeTargetEl.parentNode.removeChild(snakeTargetEl); }catch{}
-        snakeTargetEl = null;
-        snakeTargetIdx = -1;
+        // Remove remaining targets if any
+        try{ clearSnakeTargets(cells); }catch{}
 
         snakeOverlay?.classList.add("win");
         snakeOverlay?.classList.add("gameover");
@@ -1126,9 +1137,21 @@ function startGoalEmojiCycler(){
         return;
       }
 
-      if (snakeTargetEl && snakeTargetEl.parentNode) snakeTargetEl.parentNode.removeChild(snakeTargetEl);
-      snakeTargetEl = null;
-      placeSnakeTarget(cells);
+// Remove the eaten target
+try{
+  const tIdx = (snakeTargets||[]).findIndex(t=>t.idx === nextIdx);
+  if (tIdx >= 0){
+    const t = snakeTargets[tIdx];
+    const cell = cells[t.idx];
+    if (cell) cell.classList.remove("snake-target-cell");
+    if (t.el && t.el.parentNode) t.el.parentNode.removeChild(t.el);
+    snakeTargets.splice(tIdx, 1);
+    snakeTargetSet.delete(t.idx);
+  }
+}catch{}
+
+// Immediately spawn a replacement (still respecting max=5)
+placeSnakeTarget(cells);
     }
 
     // Keep rainbow effect on the whole body as it moves (including head)
@@ -1175,22 +1198,35 @@ function startGoalEmojiCycler(){
     }
 
     const headCol = Math.floor(headIdx / snakeRows);
-    const headRow = headIdx % snakeRows;
+const headRow = headIdx % snakeRows;
 
-    const maxLen = Math.min(50, headCol + 1);
-    const streakLen = Math.min(Math.max(1, computeStreak()), maxLen);
+// Build from the actual streak number (wrap through in-year cells if needed)
+const inYear = [];
+for (let i=0;i<cells.length;i++){
+  if (cells[i]?.dataset?.inyear === "1") inYear.push(i);
+}
+const headPos = inYear.indexOf(headIdx);
+if (headPos < 0){
+  stopSnakeGame();
+  return;
+}
 
-    snake = [];
-    for (let i=0;i<streakLen;i++){
-      snake.push(snakeIdxFromColRow(headCol - i, headRow));
-    }
-    snakeSet = new Set(snake);
+const streakLenRaw = Math.max(1, computeStreak());
+const streakLen = Math.min(streakLenRaw, inYear.length || streakLenRaw);
+
+snake = [];
+for (let i=0;i<streakLen;i++){
+  const pos = (headPos - i + inYear.length) % inYear.length;
+  snake.push(inYear[pos]);
+}
+snakeSet = new Set(snake);
+
 
     // visuals
     snake.forEach(idx=>cells[idx]?.classList.add("snake"));
     cells[snake[0]]?.classList.add("snake-head");
 
-    snakeScore = streakLen;
+    snakeScore = snake.length;
     snakeGameOver = false;
     updateSnakeScoreUI();
 
@@ -1198,7 +1234,15 @@ function startGoalEmojiCycler(){
     snakeCenterEl.textContent = "";
     snakeSubEl.textContent = "";
 
-    placeSnakeTarget(cells);
+clearSnakeTargets(cells);
+
+// Spawn one target immediately, then add more every 8s up to 5 at a time
+placeSnakeTarget(cells);
+if (snakeSpawnTimer) clearInterval(snakeSpawnTimer);
+snakeSpawnTimer = setInterval(()=>{
+  if (!snakeActive || snakeGameOver) return;
+  placeSnakeTarget(cells);
+}, 8000);
 
     snakeCountdownActive = false;
     snakeActive = true;
@@ -1220,6 +1264,8 @@ function startGoalEmojiCycler(){
     if (snakeTickTimer) clearInterval(snakeTickTimer);
     snakeTickTimer = null;
 
+    if (snakeSpawnTimer) clearInterval(snakeSpawnTimer);
+    snakeSpawnTimer = null;
     if (snakeRainbowTimer) clearTimeout(snakeRainbowTimer);
     snakeRainbowTimer = null;
 
@@ -1235,6 +1281,7 @@ function startGoalEmojiCycler(){
 	  const cells = Array.from(hmGrid?.querySelectorAll(".hm-cell-btn") || []);
 	  if (cells.length) applySnakeRainbow(cells);
     if (cells.length) clearSnakeVisuals(cells);
+    if (cells.length) clearSnakeTargets(cells);
 
     hideSnakeOverlay();
     startGoalCycleIfNeeded();

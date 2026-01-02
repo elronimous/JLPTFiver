@@ -5,7 +5,7 @@
   const SRS = {};
   let overlayEl, openBtn, quitBtn;
   let showBackOnRightBtn;
-  let cardEl, wrongBtn, rightBtn, undoBtn, nextBtn;
+  let cardEl, revealBtn, wrongBtn, rightBtn, undoBtn, nextBtn;
   let progressEl, scoreEl, flipHintEl;
   let modeGrammarBtn, modeSentencesBtn, examplesPerGrammarInput, examplesAllBtn;
   let statsBackdropEl, statsCloseBtn, statsSummaryEl, statsGraphEl, statsBtn;
@@ -1083,36 +1083,63 @@ if (showingBack && usableCount > 1){
   function syncActionButtons(){
     setUndoEnabled();
     if (!wrongBtn || !rightBtn || !nextBtn) return;
+
     const hasDeck = deck.length > 0;
     if (!hasDeck){
+      if (revealBtn){ revealBtn.hidden = true; revealBtn.disabled = true; }
+      if (undoBtn){ undoBtn.hidden = true; undoBtn.disabled = true; }
       wrongBtn.disabled = true;
       rightBtn.disabled = true;
       nextBtn.disabled = true;
       nextBtn.hidden = true;
       return;
     }
-if (awaitingNext){
-  wrongBtn.hidden = true;
-  rightBtn.hidden = true;
-  nextBtn.hidden = false;
-  nextBtn.disabled = false;
-} else {
-  wrongBtn.hidden = false;
-  rightBtn.hidden = false;
-  nextBtn.hidden = true;
 
-  // If the user chose "show backside on RIGHT", then RIGHT becomes a 2-step flow:
-  // RIGHT -> show back, then RIGHT again (button label changes to NEXT) to advance.
-  if (pendingRightAdvance){
-    wrongBtn.disabled = true;
-    rightBtn.disabled = false;
-    if (rightBtn) rightBtn.textContent = "NEXT";
-  } else {
-    wrongBtn.disabled = false;
-    rightBtn.disabled = false;
-    if (rightBtn) rightBtn.textContent = "RIGHT";
-  }
-}
+    // After marking WRONG we show NEXT.
+    if (awaitingNext){
+      if (revealBtn){ revealBtn.hidden = true; revealBtn.disabled = true; }
+      if (undoBtn){ undoBtn.hidden = true; }
+      wrongBtn.hidden = true;
+      rightBtn.hidden = true;
+      nextBtn.hidden = false;
+      nextBtn.disabled = false;
+      return;
+    }
+
+    // Front: UNDO + REVEAL. Back: WRONG + RIGHT.
+    if (!showingBack){
+      if (undoBtn){ undoBtn.hidden = false; }
+      if (revealBtn){ revealBtn.hidden = false; revealBtn.disabled = false; }
+
+      wrongBtn.hidden = true;
+      rightBtn.hidden = true;
+      nextBtn.hidden = true;
+
+      wrongBtn.disabled = true;
+      rightBtn.disabled = true;
+      nextBtn.disabled = true;
+      return;
+    }
+
+    // Back
+    if (undoBtn){ undoBtn.hidden = true; }
+    if (revealBtn){ revealBtn.hidden = true; revealBtn.disabled = true; }
+
+    wrongBtn.hidden = false;
+    rightBtn.hidden = false;
+    nextBtn.hidden = true;
+
+    // If the user chose "show backside on RIGHT", then RIGHT becomes a 2-step flow:
+    // RIGHT -> show back, then RIGHT again (button label changes to NEXT) to advance.
+    if (pendingRightAdvance){
+      wrongBtn.disabled = true;
+      rightBtn.disabled = false;
+      if (rightBtn) rightBtn.textContent = "NEXT";
+    } else {
+      wrongBtn.disabled = false;
+      rightBtn.disabled = false;
+      if (rightBtn) rightBtn.textContent = "RIGHT";
+    }
   }
 
   function markWrong(){
@@ -1230,6 +1257,14 @@ function applyModeToUi(){
       examplesAllBtn.disabled = disabled;
       examplesAllBtn.classList.toggle("active", !disabled && !!srs.examplesPerGrammarAll);
     }
+
+    if (showBackOnRightBtn){
+      showBackOnRightBtn.disabled = disabled;
+      const group = showBackOnRightBtn.closest(".srs-mode-group");
+      if (group) group.classList.toggle("disabled", disabled);
+    }
+
+    syncShowBackOnRightBtn();
   }
 
   function setMode(mode){
@@ -2118,6 +2153,7 @@ function syncShowBackOnRightBtn(){
 
     quitBtn = document.querySelector("#srsQuitBtn");
     cardEl = document.querySelector("#srsCard");
+    revealBtn = document.querySelector("#srsRevealBtn");
     wrongBtn = document.querySelector("#srsWrongBtn");
     rightBtn = document.querySelector("#srsRightBtn");
     nextBtn = document.querySelector("#srsNextBtn");
@@ -2208,6 +2244,13 @@ function syncShowBackOnRightBtn(){
     });
     quitBtn?.addEventListener("click", close);
     completeQuitBtnEl?.addEventListener("click", close);
+
+    revealBtn?.addEventListener("click", () => {
+      if (!Array.isArray(deck) || deck.length === 0) return;
+      if (showingBack) return;
+      showingBack = true;
+      renderCard();
+    });
 
     wrongBtn?.addEventListener("click", markWrong);
     rightBtn?.addEventListener("click", markRight);

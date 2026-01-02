@@ -747,31 +747,28 @@
   <!-- CRAM session overlay -->
   <div id="cramSessionOverlay" class="cram-session" hidden>
     <div class="cram-session-top">
-      <div class="cram-session-stats">
+      <div class="cram-session-left">
+        <div class="cram-session-stats">
         <div id="cramProgressText" class="cram-session-stat">Remaining 0 / 0</div>
         <div id="cramScoreText" class="cram-session-stat">Wrong 0 • Right 0</div>
+      </div>
+        <div class="cram-cardflow">
+          <div class="viewall-filter-label">Card flow</div>
+          <button id="cramShowBackOnRightBtn" class="chip-btn" type="button">Show Card Back</button>
+        </div>
       </div>
       <div class="cram-session-actions">
         <button id="cramQuitBtn" class="chip-btn" type="button">✕ Quit</button>
       </div>
-    
-<div class="srs-options-row">
-  <div class="srs-left-col">
-    <div class="srs-mode-group">
-      <div class="viewall-filter-label">Card flow</div>
-      <button id="cramShowBackOnRightBtn" class="chip-btn" type="button">Show Card Back</button>
-    </div>
-  </div>
-</div>
-
 </div>
 
     <div class="cram-card-wrap">
       <div id="cramCard" class="cram-card" tabindex="0" role="button" aria-label="Flashcard"></div>
       <div class="cram-actions">
+        <button id="cramUndoBtn" class="cram-action undo" type="button" disabled>UNDO</button>
+        <button id="cramRevealBtn" class="cram-action reveal" type="button">REVEAL</button>
         <button id="cramWrongBtn" class="cram-action wrong">WRONG</button>
         <button id="cramRightBtn" class="cram-action right">RIGHT</button>
-        <button id="cramUndoBtn" class="cram-action undo" type="button" disabled>UNDO</button>
         <button id="cramNextBtn" class="cram-action next" hidden>NEXT</button>
       </div>
       <div id="cramCompleteQuitRow" class="session-complete-quit" hidden>
@@ -826,9 +823,10 @@
     <div class="cram-card-wrap">
       <div id="srsCard" class="cram-card" tabindex="0" role="button" aria-label="SRS flashcard"></div>
       <div class="cram-actions">
+        <button id="srsUndoBtn" class="cram-action undo" type="button" disabled>UNDO</button>
+        <button id="srsRevealBtn" class="cram-action reveal" type="button">REVEAL</button>
         <button id="srsWrongBtn" class="cram-action wrong">WRONG</button>
         <button id="srsRightBtn" class="cram-action right">RIGHT</button>
-        <button id="srsUndoBtn" class="cram-action undo" type="button" disabled>UNDO</button>
         <button id="srsNextBtn" class="cram-action next" hidden>NEXT</button>
       </div>
       <div id="srsCompleteQuitRow" class="session-complete-quit" hidden>
