@@ -15,7 +15,9 @@
   let panel, openSettingsBtn, openMonthlyBtn, hmGrid, hmMonthLabels, hmPrevYearBtn, hmNextYearBtn, hmYearLabel;
   let hmFirstVisitWrap, hmStreakWrap, hmTotalWrap, hmFirstVisitVal, hmStreakVal, hmTotalVal;
 
-  let settingsBackdrop, closeSettingsBtn, hmShowFirstVisit, hmShowStreak, hmShowTotal, hmShowMonthTitles, hmPaletteOptions;
+  let settingsBackdrop, closeSettingsBtn, hmShowFirstVisit, hmShowStreak, hmShowTotal, hmShowMonthTitles, hmPaletteOptions, hmReviewMode;
+  let hmRangeReviewMode;
+  let hmRangeToggleBtn, hmRangePanel, hmRangeStart, hmRangeEnd, hmRangeOnlyExisting, hmRangeApplyBtn, hmRangeClearBtn;
   let monthlyBackdrop, closeMonthlyBtn, hmMonthlyList, hmMonthlyPrevBtn, hmMonthlyNextBtn, hmMonthlyLabel, hmMonthlySummary;
   let hmMonthlyBarsGrammar, hmMonthlyBarsSentences, hmMonthlyBarsCram;
   let selectedMonthKey = null; // "YYYY-MM"
@@ -154,6 +156,7 @@
     showStreak: true,
     showTotal: true,
     paletteKey: "mint",
+    markReviewMode: false,
     visitedDays: {},
     // Per-day study totals used for tooltips + monthly charts.
     // Shape: { [ymd]: { srsSentences:number, crammed:number, srsGrammarKeys:{[grammarKey]:true} } }
@@ -209,6 +212,34 @@ function startGoalEmojiCycler(){
         if (!Array.isArray(state.goals)) state.goals = [];
         if (typeof state.visible !== "boolean") state.visible = true;
         if (!state.cramGoalFiredDays || typeof state.cramGoalFiredDays !== "object") state.cramGoalFiredDays = {};
+
+        // Migration: older versions stored visitedDays[ymd] = true/false.
+        // New versions store the paletteKey used on that day so historic colours remain visible
+        // when the user changes the current palette.
+        const curPal = String(state.paletteKey || "mint");
+        try{
+          Object.keys(state.visitedDays).forEach((ymd)=>{
+            const v = state.visitedDays[ymd];
+            if (v === true) state.visitedDays[ymd] = curPal;
+            else if (v === false || v === null || v === undefined) delete state.visitedDays[ymd];
+            else if (typeof v === "string") {
+              // keep
+            } else if (typeof v === "object") {
+              // Newer format: { colorKey, review }
+              const mk = normalizeDayMark(v);
+              if (mk){
+                // Store compactly when not a review day
+                if (mk.review) state.visitedDays[ymd] = { colorKey: mk.palKey, review: true };
+                else state.visitedDays[ymd] = mk.palKey;
+              }else{
+                state.visitedDays[ymd] = curPal;
+              }
+            } else {
+              // unknown legacy type -> keep as current palette so it stays visible
+              state.visitedDays[ymd] = curPal;
+            }
+          });
+        }catch(_e){}
       }
     }catch{}
   }
@@ -246,10 +277,139 @@ function startGoalEmojiCycler(){
   function recordTodayVisit(){
     const todayYMD = Utils.dateToYMD(new Date());
     if (!state.visitedDays[todayYMD]){
-      state.visitedDays[todayYMD] = true;
+      setDayMark(todayYMD, String(state.paletteKey || "mint"), false);
       save();
     }
   }
+
+  
+  function normalizeDayMark(v){
+    // Returns { palKey, review } or null
+    if (!v) return null;
+    if (typeof v === "string") return { palKey: v, review: false };
+    if (v === true) return { palKey: String(state.paletteKey || "mint"), review: false };
+    if (typeof v === "object"){
+      const palKey = (typeof v.colorKey === "string" && v.colorKey) ? v.colorKey
+        : (typeof v.paletteKey === "string" && v.paletteKey) ? v.paletteKey
+        : (typeof v.palKey === "string" && v.palKey) ? v.palKey
+        : null;
+      return { palKey: palKey || String(state.paletteKey || "mint"), review: !!v.review };
+    }
+    return { palKey: String(state.paletteKey || "mint"), review: false };
+  }
+
+  function getDayMark(ymd){
+    const v = state.visitedDays && typeof state.visitedDays === "object" ? state.visitedDays[ymd] : null;
+    return normalizeDayMark(v);
+  }
+
+  function setDayMark(ymd, palKey, review){
+    const pal = String(palKey || state.paletteKey || "mint");
+    if (review){
+      state.visitedDays[ymd] = { colorKey: pal, review: true };
+    }else{
+      // keep storage compact for non-review days
+      state.visitedDays[ymd] = pal;
+    }
+  }
+
+  function darkenCssColor(c, factor){
+    // Supports rgba()/rgb() and #rrggbb. Falls back to original.
+    try{
+      const f = Math.max(0, Math.min(1, Number(factor)));
+      const s = String(c || "");
+      const m = s.match(/rgba?\(([^)]+)\)/i);
+      if (m){
+        const parts = m[1].split(",").map(x=>x.trim());
+        const r = Math.max(0, Math.min(255, Math.round(parseFloat(parts[0]) * f)));
+        const g = Math.max(0, Math.min(255, Math.round(parseFloat(parts[1]) * f)));
+        const b = Math.max(0, Math.min(255, Math.round(parseFloat(parts[2]) * f)));
+        const a = parts.length >= 4 ? Math.max(0, Math.min(1, parseFloat(parts[3]))) : null;
+        return a === null ? `rgb(${r},${g},${b})` : `rgba(${r},${g},${b},${a})`;
+      }
+      if (s.startsWith("#") && s.length === 7){
+        const r0 = parseInt(s.slice(1,3),16);
+        const g0 = parseInt(s.slice(3,5),16);
+        const b0 = parseInt(s.slice(5,7),16);
+        const r = Math.max(0, Math.min(255, Math.round(r0 * f)));
+        const g = Math.max(0, Math.min(255, Math.round(g0 * f)));
+        const b = Math.max(0, Math.min(255, Math.round(b0 * f)));
+        return `rgb(${r},${g},${b})`;
+      }
+    }catch(_e){}
+    return c;
+  }
+
+  function applyCellPalette(btn, paletteKey, isReview){
+    if (!btn) return;
+    const key = String(paletteKey || "");
+    const pal = HEATMAP_PALETTES.find(p=>p.key===key) || null;
+    if (!pal){
+      btn.style.borderColor = "";
+      btn.style.backgroundColor = "";
+      return;
+    }
+    if (isReview){
+      const f = 0.62;
+      btn.style.borderColor = darkenCssColor(pal.border, f);
+      btn.style.backgroundColor = darkenCssColor(pal.fill, f);
+    }else{
+      btn.style.borderColor = pal.border;
+      btn.style.backgroundColor = pal.fill;
+    }
+  }
+
+
+  function eachDayInRange(startYMD, endYMD, cb){
+    const a = Utils.ymdToDate(startYMD);
+    const b = Utils.ymdToDate(endYMD);
+    // normalise order
+    let start = a, end = b;
+    if (start.getTime() > end.getTime()){ start = b; end = a; }
+    const msPerDay = 24*60*60*1000;
+    for (let t = start.getTime(); t <= end.getTime(); t += msPerDay){
+      const d = new Date(t);
+      cb(Utils.dateToYMD(d), d);
+    }
+  }
+
+  
+  function applyRangePalette(startYMD, endYMD, paletteKey, onlyExisting, reviewMode){
+    if (!startYMD || !endYMD) return { ok:false, msg:"Pick both a start and end date." };
+    const pal = String(paletteKey || state.paletteKey || "mint");
+    const mode = String(reviewMode || "leave"); // leave | set | clear
+    let changed = 0;
+    eachDayInRange(startYMD, endYMD, (ymd)=>{
+      const existing = getDayMark(ymd);
+      if (onlyExisting && !existing) return;
+
+      let review = existing ? existing.review : false;
+      if (mode === "set") review = true;
+      else if (mode === "clear") review = false;
+
+      setDayMark(ymd, pal, review);
+      changed++;
+    });
+    if (!changed) return { ok:false, msg:"No days were changed (maybe none of the days were already in the log)." };
+    save();
+    return { ok:true, msg:`Updated ${changed} day${changed===1?"":"s"}.` };
+  }
+
+  function removeRangeDays(startYMD, endYMD, onlyExisting){
+    if (!startYMD || !endYMD) return { ok:false, msg:"Pick both a start and end date." };
+    let removed = 0;
+    eachDayInRange(startYMD, endYMD, (ymd)=>{
+      if (onlyExisting && !state.visitedDays[ymd]) return;
+      if (state.visitedDays[ymd]){
+        delete state.visitedDays[ymd];
+        removed++;
+      }
+    });
+    if (!removed) return { ok:false, msg:"No days were removed." };
+    save();
+    return { ok:true, msg:`Removed ${removed} day${removed===1?"":"s"} from the log.` };
+  }
+
 
   function getActiveVisitedYMDs(){
     return Object.keys(state.visitedDays||{}).filter(k=>!!state.visitedDays[k]).sort();
@@ -350,8 +510,9 @@ function startGoalEmojiCycler(){
         }
       }
 
-      // Mark today as visited (in case the user hasn't opened the page earlier).
-      state.visitedDays[ymd] = true;
+      // Mark today as visited with the current palette (so historic colours remain).
+      const _ex = getDayMark(ymd);
+      setDayMark(ymd, String(state.paletteKey || "mint"), _ex ? _ex.review : false);
 
       save();
       return { ymd, delta: { srsSentences: 1 }, addedGrammarKey };
@@ -366,7 +527,8 @@ function startGoalEmojiCycler(){
       const ds = ensureDayStats(ymd);
       if (!ds) return null;
       ds.crammed = Number(ds.crammed || 0) + 1;
-      state.visitedDays[ymd] = true;
+      const _ex = getDayMark(ymd);
+      setDayMark(ymd, String(state.paletteKey || "mint"), _ex ? _ex.review : false);
       save();
       return { ymd, delta: { crammed: 1 }, addedGrammarKey: null };
     }catch(e){
@@ -994,6 +1156,12 @@ function placeSnakeTarget(cells){
     if (Number(state.viewYear) !== curYear) return;
     if (snakeActive || snakeCountdownActive) return;
 
+    // If a fireworks-only overlay is active (used for celebrations), exit it so the
+    // snake countdown/game-over UI can render (the fireworks-only CSS hides center text).
+    if (fireworksOnlyActive || (snakeOverlay && snakeOverlay.classList && snakeOverlay.classList.contains("hm-fireworks-only"))){
+      try{ stopFireworksOverlay(); }catch(_e){}
+    }
+
     ensureSnakeOverlay();
     stopGoalCycleTimer();
     Tooltip.hide();
@@ -1165,6 +1333,12 @@ placeSnakeTarget(cells);
       // Do not start in other years
       stopSnakeGame();
       return;
+    }
+
+    // Ensure we're not in fireworks-only mode, otherwise the snake UI (including GAME OVER)
+    // would be hidden by CSS.
+    if (fireworksOnlyActive || (snakeOverlay && snakeOverlay.classList && snakeOverlay.classList.contains("hm-fireworks-only"))){
+      try{ stopFireworksOverlay(); }catch(_e){}
     }
 
     ensureSnakeOverlay();
@@ -1558,6 +1732,9 @@ snakeSpawnTimer = setInterval(()=>{
       });
     }
 
+    const mark = getDayMark(ymd);
+    if (mark && mark.review) lines.push("Review day");
+
     // Activity totals (only show non-zero lines)
     const counts = getCountsForYMD(ymd);
     if (counts.grammar > 0) lines.push(`Grammar: ${counts.grammar}`);
@@ -1664,8 +1841,12 @@ snakeSpawnTimer = setInterval(()=>{
         btn.dataset.inyear = "1";
         btn.dataset.ymd = ymd;
 
-        const visited = !!state.visitedDays[ymd];
-        if (visited) btn.classList.add("visited");
+        const mark = getDayMark(ymd);
+        const visited = !!mark;
+        if (visited){
+          btn.classList.add("visited");
+          applyCellPalette(btn, mark.palKey, mark.review);
+        }
         if (ymd === todayYMD) btn.classList.add("today");
         if (d.getDate() === 1) btn.classList.add("month-boundary");
 
@@ -1693,8 +1874,31 @@ snakeSpawnTimer = setInterval(()=>{
           // prevent toggles during the snake mini-game, and suppress the post-hold click
           if (snakeActive || snakeCountdownActive || Date.now() < suppressClicksUntil) return;
 
-          if (state.visitedDays[ymd]) delete state.visitedDays[ymd];
-          else state.visitedDays[ymd] = true;
+          const isAlt = !!ev.altKey;
+          const existing = getDayMark(ymd);
+
+          if (isAlt){
+            // Alt/Option-click toggles the "review" modifier without removing the day.
+            const pal = existing ? existing.palKey : String(state.paletteKey || "mint");
+            const nextReview = existing ? !existing.review : true;
+            setDayMark(ymd, pal, nextReview);
+            applyCellPalette(btn, pal, nextReview);
+            btn.classList.add("visited");
+            save();
+            renderStats();
+            return;
+          }
+
+          if (state.visitedDays[ymd]){
+            delete state.visitedDays[ymd];
+            btn.style.borderColor = "";
+            btn.style.backgroundColor = "";
+          } else {
+            const pal = String(state.paletteKey || "mint");
+            const review = !!state.markReviewMode;
+            setDayMark(ymd, pal, review);
+            applyCellPalette(btn, pal, review);
+          }
           save();
           btn.classList.toggle("visited", !!state.visitedDays[ymd]);
           renderStats();
@@ -1955,6 +2159,73 @@ snakeSpawnTimer = setInterval(()=>{
     hmShowTotal = Utils.qs("#hmShowTotal");
     hmShowMonthTitles = Utils.qs("#hmShowMonthTitles");
     hmPaletteOptions = Utils.qs("#hmPaletteOptions");
+    hmReviewMode = Utils.qs("#hmReviewMode");
+
+
+    // Range editor (recolour / fix ranges of days)
+    hmRangeToggleBtn = Utils.qs("#hmRangeToggleBtn");
+    hmRangePanel = Utils.qs("#hmRangePanel");
+    hmRangeStart = Utils.qs("#hmRangeStart");
+    hmRangeEnd = Utils.qs("#hmRangeEnd");
+    hmRangeOnlyExisting = Utils.qs("#hmRangeOnlyExisting");
+    hmRangeApplyBtn = Utils.qs("#hmRangeApplyBtn");
+    hmRangeClearBtn = Utils.qs("#hmRangeClearBtn");
+    hmRangeReviewMode = Utils.qs("#hmRangeReviewMode");
+
+    // Defaults: last 7 days to today
+    try{
+      const today = new Date();
+      const weekAgo = new Date(today.getTime() - 6*24*60*60*1000);
+      if (hmRangeStart && !hmRangeStart.value) hmRangeStart.value = Utils.dateToYMD(weekAgo);
+      if (hmRangeEnd && !hmRangeEnd.value) hmRangeEnd.value = Utils.dateToYMD(today);
+    }catch(_e){}
+
+    if (hmReviewMode){
+      hmReviewMode.checked = !!state.markReviewMode;
+      hmReviewMode.addEventListener("change", ()=>{
+        state.markReviewMode = !!hmReviewMode.checked;
+        save();
+      });
+    }
+
+    if (hmRangeToggleBtn && hmRangePanel){
+      hmRangeToggleBtn.addEventListener("click", ()=>{
+        hmRangePanel.hidden = !hmRangePanel.hidden;
+      });
+    }
+
+    if (hmRangeApplyBtn){
+      hmRangeApplyBtn.addEventListener("click", ()=>{
+        const startY = hmRangeStart?.value || "";
+        const endY = hmRangeEnd?.value || "";
+        const onlyExisting = !!hmRangeOnlyExisting?.checked;
+        const reviewMode = hmRangeReviewMode ? hmRangeReviewMode.value : "leave";
+        const res = applyRangePalette(startY, endY, state.paletteKey, onlyExisting, reviewMode);
+        if (!res.ok){
+          alert(res.msg);
+          return;
+        }
+        render();
+      });
+    }
+
+    if (hmRangeClearBtn){
+      hmRangeClearBtn.addEventListener("click", ()=>{
+        const startY = hmRangeStart?.value || "";
+        const endY = hmRangeEnd?.value || "";
+        const onlyExisting = !!hmRangeOnlyExisting?.checked;
+        const ok = confirm("This will remove days from your Study Log for that range (and will affect totals/streaks). Continue?");
+        if (!ok) return;
+        const res = removeRangeDays(startY, endY, onlyExisting);
+        if (!res.ok){
+          alert(res.msg);
+          return;
+        }
+        renderStats();
+        render();
+      });
+    }
+
 
     monthlyBackdrop = Utils.qs("#heatmapMonthlyModalBackdrop");
     closeMonthlyBtn = Utils.qs("#closeHeatmapMonthlyBtn");

@@ -563,6 +563,9 @@
     const include = (opts && opts.include) ? opts.include : {};
     const n = normalizeIncoming(parsed);
 
+	  // Ensure userData exists before any import branches touch it.
+	  const ud = Storage.userData || (Storage.userData = {});
+
     // User data
     if (include.seen && n.seenExamples){
       if (mode === "overwrite") Storage.userData.seenExamples = n.seenExamples;

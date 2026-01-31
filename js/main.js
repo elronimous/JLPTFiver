@@ -548,8 +548,18 @@
           const parsed = JSON.parse(e.target.result);
           const baseInspect = Storage.inspectPayload(parsed);
           // Cram session is stored under its own localStorage key, so handle it here.
-          const cs = parsed && typeof parsed === "object" ? parsed.cramSession : null;
-          const hasCramSession = !!(cs && typeof cs === "object" && Array.isArray(cs.deck) && cs.deck.length);
+          const cs = parsed && typeof parsed === "object" ? (parsed.cramSession || parsed.cram_session || parsed.cram || null) : null;
+          // Be generous here: older exports or partial backups may store different shapes.
+          // If it's an object with any meaningful keys, let the user choose to import it.
+          const hasCramSession = !!(
+            cs && typeof cs === "object" && (
+              (Array.isArray(cs.deck) && cs.deck.length >= 0) ||
+              (Array.isArray(cs.wrongGrammar) && cs.wrongGrammar.length >= 0) ||
+              (Array.isArray(cs.queue) && cs.queue.length >= 0) ||
+              (Array.isArray(cs.items) && cs.items.length >= 0) ||
+              Object.keys(cs).length > 0
+            )
+          );
           const inspect = {
             ...baseInspect,
             hasCramSession,
@@ -557,12 +567,16 @@
           };
           pendingImport = { parsed, inspect };
 
-          // Fill summary + enable/disable options based on availability
+          // Fill summary + pre-check options based on availability.
+          // NOTE: We intentionally do NOT disable checkboxes.
+          // Users may be importing older exports where we can't reliably detect
+          // every section (especially CRAM session), and disabling makes it feel broken.
           importSummaryHint.textContent = summarizeIncoming(inspect);
 
           const setOpt = (cb, has)=>{
-            cb.disabled = !has;
+            if (!cb) return;
             cb.checked = !!has;
+            cb.dataset.hasData = has ? "1" : "0";
           };
           setOpt(imSeen, inspect.hasSeen);
           setOpt(imNotes, inspect.hasNotes);
@@ -572,7 +586,7 @@
           setOpt(imUi, inspect.hasUi);
           setOpt(imCramLists, inspect.hasCramLists);
           setOpt(imHeatmap, inspect.hasHeatmap);
-          if (imCramSession) setOpt(imCramSession, inspect.hasCramSession);
+          setOpt(imCramSession, inspect.hasCramSession);
 
           // Default mode
           importModeOverwrite.checked = true;
@@ -588,73 +602,143 @@
     });
 
     applyImportBtn.addEventListener("click", ()=>{
-      if (!pendingImport) return;
-
-      const mode = importModeMerge.checked ? "merge" : "overwrite";
-      const include = {
-        seen: !!imSeen.checked,
-        notes: !!imNotes.checked,
-        scores: !!imScores.checked,
-        srs: !!imSrs.checked,
-        settings: !!imSettings.checked,
-        ui: !!imUi.checked,
-        cramLists: !!imCramLists.checked
-      };
-      const wantCramSession = !!(imCramSession && imCramSession.checked);
-      const any = Object.values(include).some(Boolean) || !!imHeatmap.checked || wantCramSession;
-      if (!any){
-        alert("Select at least one thing to import.");
-        return;
-      }
-
-      // Storage import (handles merge/overwrite)
-      Storage.importSelected(pendingImport.parsed, { mode, include });
-
-      // Heatmap import/merge
-      if (imHeatmap.checked && window.Heatmap && pendingImport.inspect.normalized.heatmap){
-        const incomingHm = pendingImport.inspect.normalized.heatmap;
-        if (mode === "overwrite"){
-          Heatmap.importState(incomingHm);
-        } else {
-          const merged = mergeHeatmapState(Heatmap.exportState(), incomingHm);
-          Heatmap.importState(merged);
+      try{
+        if (!pendingImport){
+          alert("No import file is loaded. Please choose a file again.");
+          return;
         }
-      }
 
-      // Cram session import/merge
-      if (wantCramSession && pendingImport.inspect.normalized.cramSession){
-        try{
-          const key = CONST.STORAGE_KEYS.CRAM_SESSION;
-          if (mode === "overwrite"){
-            localStorage.setItem(key, JSON.stringify(pendingImport.inspect.normalized.cramSession));
-          } else {
-            // merge: only import a resumable session if the user doesn't currently have one
-            const cur = localStorage.getItem(key);
-            if (!cur) localStorage.setItem(key, JSON.stringify(pendingImport.inspect.normalized.cramSession));
+        const mode = importModeMerge.checked ? "merge" : "overwrite";
+        const include = {
+          seen: !!imSeen.checked,
+          notes: !!imNotes.checked,
+          scores: !!imScores.checked,
+          srs: !!imSrs.checked,
+          settings: !!imSettings.checked,
+          ui: !!imUi.checked,
+          cramLists: !!imCramLists.checked
+        };
+        const wantHeatmap = !!imHeatmap.checked;
+        const wantCramSession = !!(imCramSession && imCramSession.checked);
+
+        // If the user ticks things that aren't in the file (older exports / partial backups), skip them.
+        const ins = pendingImport.inspect;
+        const selectedButMissing = [];
+        const effective = {
+          seen: include.seen && !!ins.hasSeen,
+          notes: include.notes && !!ins.hasNotes,
+          scores: include.scores && !!ins.hasScores,
+          srs: include.srs && !!ins.hasSrs,
+          settings: include.settings && !!ins.hasSettings,
+          ui: include.ui && !!ins.hasUi,
+          cramLists: include.cramLists && !!ins.hasCramLists,
+          heatmap: wantHeatmap && !!ins.hasHeatmap,
+          cramSession: wantCramSession && (ins.hasCramSession || !!ins.normalized?.cramSession)
+        };
+
+        // Track missing selections for a friendly message.
+        if (include.seen && !ins.hasSeen) selectedButMissing.push("Stars / Seen items");
+        if (include.notes && !ins.hasNotes) selectedButMissing.push("Custom sentences (Notes)");
+        if (include.scores && !ins.hasScores) selectedButMissing.push("Emoji scores");
+        if (include.srs && !ins.hasSrs) selectedButMissing.push("SRS");
+        if (include.settings && !ins.hasSettings) selectedButMissing.push("App settings");
+        if (include.ui && !ins.hasUi) selectedButMissing.push("UI");
+        if (include.cramLists && !ins.hasCramLists) selectedButMissing.push("Custom cram lists");
+        if (wantHeatmap && !ins.hasHeatmap) selectedButMissing.push("Study Log (heatmap)");
+        if (wantCramSession && !(ins.hasCramSession || !!ins.normalized?.cramSession)) selectedButMissing.push("Saved cram session");
+
+        const anyEffective = Object.values({
+          seen: effective.seen,
+          notes: effective.notes,
+          scores: effective.scores,
+          srs: effective.srs,
+          settings: effective.settings,
+          ui: effective.ui,
+          cramLists: effective.cramLists,
+          heatmap: effective.heatmap,
+          cramSession: effective.cramSession
+        }).some(Boolean);
+
+        if (!anyEffective){
+          alert("Nothing selected that exists in this file. Try a different backup, or tick other sections.");
+          return;
+        }
+
+        // Tell the user what we'll skip (but continue).
+        if (selectedButMissing.length){
+          alert(`Some selected items weren't found in the file and will be skipped:\n\n- ${selectedButMissing.join("\n- ")}`);
+        }
+
+        // Storage import (handles merge/overwrite)
+        Storage.importSelected(pendingImport.parsed, {
+          mode,
+          include: {
+            seen: effective.seen,
+            notes: effective.notes,
+            scores: effective.scores,
+            srs: effective.srs,
+            settings: effective.settings,
+            ui: effective.ui,
+            cramLists: effective.cramLists
           }
-        }catch(_e){ /* ignore */ }
+        });
+
+        // Heatmap import/merge
+        if (effective.heatmap && window.Heatmap && pendingImport.inspect.normalized.heatmap){
+          const incomingHm = pendingImport.inspect.normalized.heatmap;
+          if (mode === "overwrite"){
+            Heatmap.importState(incomingHm);
+          } else {
+            const merged = mergeHeatmapState(Heatmap.exportState(), incomingHm);
+            Heatmap.importState(merged);
+          }
+        }
+
+        // Cram session import/merge
+        if (effective.cramSession && (pendingImport.inspect.normalized.cramSession || pendingImport.parsed.cramSession)){
+          try{
+            const key = CONST.STORAGE_KEYS.CRAM_SESSION;
+            const toSave = pendingImport.inspect.normalized.cramSession || pendingImport.parsed.cramSession;
+            if (mode === "overwrite"){
+              localStorage.setItem(key, JSON.stringify(toSave));
+            } else {
+              // merge: only import a resumable session if the user doesn't currently have one
+              const cur = localStorage.getItem(key);
+              if (!cur) localStorage.setItem(key, JSON.stringify(toSave));
+            }
+          }catch(_e){ /* ignore */ }
+        }
+
+        // Update settings UI (guarded so import never feels like it "does nothing")
+        try{
+          toggleHideEnglishNotes.checked = !!Storage.settings.hideEnglishDefault;
+          if (toggleCleanExampleFormatting) toggleCleanExampleFormatting.checked = !!Storage.settings.cleanExampleFormatting;
+          toggleEmojiScores.checked = !!Storage.settings.scoresEnabled;
+          toggleProgressiveMode.checked = !!Storage.settings.progressiveEnabled;
+          progressiveDatesWrap.hidden = !toggleProgressiveMode.checked;
+          if (!progressiveDatesWrap.hidden) buildProgressiveGrid();
+        }catch(_e){}
+
+        // Heatmap visibility UI
+        try{
+          if (window.Heatmap){
+            toggleHeatmapVisible.checked = !!Heatmap.exportState().visible;
+          }
+        }catch(_e){}
+
+        try{
+          updateFilterButtons();
+          window.App.Scores?.applyEnabled?.(Storage.settings.scoresEnabled && !Storage.settings.srsEnabled);
+          render();
+          if (!Utils.qs("#viewAllModal").hidden) window.App.ViewAll.open();
+          window.App.Cram?.refreshIfOpen?.();
+        }catch(_e){}
+
+        closeImportOptions();
+      }catch(e){
+        console.error(e);
+        alert("Import failed. Open DevTools → Console for details.");
       }
-
-      // Update settings UI
-      toggleHideEnglishNotes.checked = !!Storage.settings.hideEnglishDefault;
-      if (toggleCleanExampleFormatting) toggleCleanExampleFormatting.checked = !!Storage.settings.cleanExampleFormatting;
-      toggleEmojiScores.checked = !!Storage.settings.scoresEnabled;
-      toggleProgressiveMode.checked = !!Storage.settings.progressiveEnabled;
-      progressiveDatesWrap.hidden = !toggleProgressiveMode.checked;
-      if (!progressiveDatesWrap.hidden) buildProgressiveGrid();
-
-      // Heatmap visibility UI
-      if (window.Heatmap){
-        toggleHeatmapVisible.checked = !!Heatmap.exportState().visible;
-      }
-
-      updateFilterButtons();
-      window.App.Scores.applyEnabled(Storage.settings.scoresEnabled && !Storage.settings.srsEnabled);
-      render();
-      if (!Utils.qs("#viewAllModal").hidden) window.App.ViewAll.open();
-      window.App.Cram?.refreshIfOpen?.();
-
-      closeImportOptions();
     });
     // Delete data (with a checkbox picker)
     function setDeleteChecks(val){

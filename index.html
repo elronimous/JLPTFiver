@@ -342,6 +342,48 @@
 
         <div class="settings-section-title">Colour palette</div>
         <div id="hmPaletteOptions" class="hm-palette-options"></div>
+        <label class="settings-row" for="hmReviewMode" style="margin-top:.35rem">
+          <input id="hmReviewMode" type="checkbox" />
+          <span>Mark clicks as a review day (darker)</span>
+        </label>
+        <div class="hm-range-tools">
+          <button id="hmRangeToggleBtn" type="button" class="modal-btn">Edit range</button>
+          <div id="hmRangePanel" class="hm-range-panel" hidden>
+            <div class="hm-range-row">
+              <label class="hm-range-label">From
+                <input id="hmRangeStart" type="date" class="hm-range-input" />
+              </label>
+              <label class="hm-range-label">To
+                <input id="hmRangeEnd" type="date" class="hm-range-input" />
+              </label>
+            </div>
+
+            <label class="hm-range-check" for="hmRangeOnlyExisting">
+              <input id="hmRangeOnlyExisting" type="checkbox" checked />
+              <span>Only recolour days already in the log</span>
+            </label>
+
+            
+            <div class="hm-range-row" style="margin-top:.35rem">
+              <label class="hm-range-label" style="flex:1">Review marker
+                <select id="hmRangeReviewMode" class="hm-range-input" style="width:100%">
+                  <option value="leave" selected>Leave as-is</option>
+                  <option value="set">Set as review (darker)</option>
+                  <option value="clear">Clear review marker</option>
+                </select>
+              </label>
+            </div>
+<div class="hm-range-actions">
+              <button id="hmRangeApplyBtn" type="button" class="modal-btn primary">Apply current colour</button>
+              <button id="hmRangeClearBtn" type="button" class="modal-btn danger">Remove days from log</button>
+            </div>
+
+            <div class="modal-hint">
+              Tip: pick a colour above, choose a date range, then apply. (Removing days will affect totals/streaks.)
+            </div>
+          </div>
+        </div>
+
 
         <div class="settings-section-title">Goals</div>
         <div class="modal-hint">

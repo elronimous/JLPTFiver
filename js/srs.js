@@ -653,7 +653,7 @@ return srs;
     if (pct >= 0.45) return { headline: "Getting there", short: "Getting there", sub: "Progress is building, but it still needs a few clean wins." };
     if (pct >= 0.25) return { headline: "A bit shaky", short: "A bit shaky", sub: "It’s slipping in and out. A short extra pass will help." };
     if (pct >= 0.10) return { headline: "Needs work", short: "Needs work", sub: "This is missing often. Focus on it for a couple of sessions." };
-    return { headline: "High priority", short: "High priority", sub: "This one isn’t sticking yet. Give it targeted attention." };
+    return { headline: "High Priority", short: "High Priority", sub: "This one isn’t sticking yet. Give it targeted attention." };
   }
 
   function formatDueLabel(card){
@@ -801,9 +801,11 @@ function getEmojiForKey(grammarKey){
       };
     }
 
+    const msg = perfMessage(score);
     return {
       emoji: emojiFromScore(score),
-      title: `${perfMessage(score).headline} · Level ${lvl} · ${perfMessage(score).short}`
+      // Keep the tooltip short and non-repetitive.
+      title: `Level ${lvl} - ${msg.headline}`
     };
   }
 

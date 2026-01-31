@@ -2251,3 +2251,27 @@ body.asteroids-mode .invaders-definition{
   font-size:1.12rem;
   padding:.85rem 1.05rem;
 }
+
+
+/* Heatmap: range editor */
+.hm-range-tools{margin-top:.55rem}
+.hm-range-panel{
+  margin-top:.5rem;
+  border:1px solid rgba(148,163,184,.18);
+  background:rgba(2,6,23,.42);
+  border-radius:.9rem;
+  padding:.65rem .7rem;
+}
+.hm-range-row{display:flex;gap:.6rem;flex-wrap:wrap;align-items:end}
+.hm-range-label{display:flex;flex-direction:column;gap:.25rem;font-size:.78rem;color:rgba(226,232,240,.92)}
+.hm-range-input{
+  border-radius:.55rem;
+  border:1px solid rgba(148,163,184,.28);
+  background:rgba(15,23,42,.75);
+  color:var(--text-main);
+  padding:.25rem .45rem;
+  font-size:.8rem;
+}
+.hm-range-check{display:flex;align-items:center;gap:.55rem;margin-top:.55rem;user-select:none}
+.hm-range-check input{transform:translateY(1px)}
+.hm-range-actions{display:flex;gap:.55rem;flex-wrap:wrap;margin-top:.6rem}
