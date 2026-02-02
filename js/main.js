@@ -717,6 +717,11 @@
           toggleProgressiveMode.checked = !!Storage.settings.progressiveEnabled;
           progressiveDatesWrap.hidden = !toggleProgressiveMode.checked;
           if (!progressiveDatesWrap.hidden) buildProgressiveGrid();
+
+          // If settings were imported, also sync Study Log's "review day" preference immediately.
+          if (effective.settings && window.Heatmap && typeof Heatmap.setMarkReviewMode === "function"){
+            Heatmap.setMarkReviewMode(!!Storage.settings.heatmapMarkReviewMode);
+          }
         }catch(_e){}
 
         // Heatmap visibility UI

@@ -240,6 +240,24 @@ function startGoalEmojiCycler(){
             }
           });
         }catch(_e){}
+
+        // Keep the "mark clicks as review" toggle as a global preference too.
+        // This makes it persist even if the heatmap state is reset, and it becomes part of Settings export/import.
+        try{
+          if (Storage && Storage.settings){
+            const has = (typeof Storage.settings.heatmapMarkReviewMode === "boolean");
+            if (!has){
+              Storage.settings.heatmapMarkReviewMode = !!state.markReviewMode;
+              Storage.saveSettings && Storage.saveSettings();
+            } else {
+              const wanted = !!Storage.settings.heatmapMarkReviewMode;
+              if (!!state.markReviewMode !== wanted){
+                state.markReviewMode = wanted;
+                save();
+              }
+            }
+          }
+        }catch(_e){}
       }
     }catch{}
   }
@@ -2115,6 +2133,22 @@ snakeSpawnTimer = setInterval(()=>{
     }
   };
 
+  // Global preference: when enabled, clicks mark days as "review" (darker).
+  Heatmap.setMarkReviewMode = (on) => {
+    state.markReviewMode = !!on;
+    try{
+      if (hmReviewMode) hmReviewMode.checked = !!state.markReviewMode;
+    }catch(_e){}
+    // Mirror into Settings so it persists and can be exported/imported as a generic preference.
+    try{
+      if (Storage && Storage.settings){
+        Storage.settings.heatmapMarkReviewMode = !!state.markReviewMode;
+        Storage.saveSettings && Storage.saveSettings();
+      }
+    }catch(_e){}
+    save();
+  };
+
   Heatmap.exportState = () => JSON.parse(JSON.stringify(state));
   Heatmap.importState = (incoming) => {
     if (!incoming || typeof incoming !== "object") return;
@@ -2184,6 +2218,13 @@ snakeSpawnTimer = setInterval(()=>{
       hmReviewMode.checked = !!state.markReviewMode;
       hmReviewMode.addEventListener("change", ()=>{
         state.markReviewMode = !!hmReviewMode.checked;
+        // Persist as both heatmap state + global setting so it survives refresh and travels with Settings exports.
+        try{
+          if (Storage && Storage.settings){
+            Storage.settings.heatmapMarkReviewMode = !!state.markReviewMode;
+            Storage.saveSettings && Storage.saveSettings();
+          }
+        }catch(_e){}
         save();
       });
     }

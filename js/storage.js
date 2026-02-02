@@ -38,6 +38,8 @@
     progressiveStartByLevel: {}, // level -> "YYYY-MM-DD"
     srsEnabled: false,
     cardFontScale: 1,
+    // Study Log (heatmap)
+    heatmapMarkReviewMode: false,
     // CRAM
     cramDailyGoal: 0 // 0 = off
   };
@@ -126,6 +128,7 @@
     if (typeof Storage.settings.srsEnabled !== "boolean") Storage.settings.srsEnabled = false;
     if (typeof Storage.settings.showBackOnRight !== "boolean") Storage.settings.showBackOnRight = false;
     if (typeof Storage.settings.cleanExampleFormatting !== "boolean") Storage.settings.cleanExampleFormatting = false;
+    if (typeof Storage.settings.heatmapMarkReviewMode !== "boolean") Storage.settings.heatmapMarkReviewMode = false;
     if (typeof Storage.settings.cardFontScale !== "number" || !Number.isFinite(Storage.settings.cardFontScale)){
       Storage.settings.cardFontScale = 1;
     }
