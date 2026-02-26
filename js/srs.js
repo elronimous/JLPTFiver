@@ -9,6 +9,7 @@
   let progressEl, scoreEl, flipHintEl;
   let modeGrammarBtn, modeSentencesBtn, examplesPerGrammarInput, examplesAllBtn;
   let statsBackdropEl, statsCloseBtn, statsSummaryEl, statsGraphEl, statsBtn;
+  let statsLevelFilterWrapEl, statsLevelFilterBtns;
   let statsNewCountEl, statsReviewCountEl, statsStartNewBtn, statsReviewDueBtn, editFsrsBtn;
   let fsrsBackdropEl, fsrsCloseBtn, fsrsHintEl, fsrsAutoAdjustBtn, fsrsSaveBtn, fsrsResetBtn;
   let fsrsGrowthRateInput, fsrsLapsePenaltyInput, fsrsDiffUpInput, fsrsDiffDownInput, fsrsInitStabGoodInput, fsrsInitStabBadInput, fsrsMaxIntervalInput;
@@ -146,6 +147,13 @@ function attachKeydown(){
     srs.examplesPerGrammar = Number.isFinite(eg) ? Math.max(1, Math.min(10, eg)) : 3;
     srs.examplesPerGrammarAll = !!srs.examplesPerGrammarAll;
 
+    // JLPT level filter for SRS sessions (empty = ALL)
+    if (!Array.isArray(srs.levelFilter)) srs.levelFilter = [];
+    srs.levelFilter = srs.levelFilter
+      .map(v=>String(v||"").toUpperCase())
+      .filter(v=>/^N[1-5]$/.test(v));
+
+
     // FSRS tuning (simple parameters used by applyReview)
     if (!srs.fsrsSettings || typeof srs.fsrsSettings !== "object") srs.fsrsSettings = {};
     const fs = srs.fsrsSettings;
@@ -218,6 +226,107 @@ return srs;
       .map(n=>({ jpHtml: n.jpHtml || "", enHtml: n.enHtml || "" }))
       .filter(n => Utils.htmlToText(n.jpHtml).length > 0);
   }
+
+  // SRS JLPT level filter (stored in userData.srs.levelFilter as an array; empty = ALL)
+  function getSrsLevelFilterSet(){
+    const srs = ensureSrsConfig();
+    const arr = Array.isArray(srs.levelFilter) ? srs.levelFilter : [];
+    const set = new Set(
+      arr.map(v=>String(v||" ").toUpperCase().trim())
+         .filter(v=>/^N[1-5]$/.test(v))
+    );
+    return set;
+  }
+
+  function saveSrsLevelFilterSet(set){
+    const srs = ensureSrsConfig();
+    const order = Array.isArray(CONST.LEVEL_ORDER) && CONST.LEVEL_ORDER.length
+      ? CONST.LEVEL_ORDER
+      : ["N5","N4","N3","N2","N1"];
+
+    if (!set || !(set instanceof Set) || set.size === 0){
+      srs.levelFilter = [];
+    } else {
+      const arr = Array.from(set)
+        .map(v=>String(v||" ").toUpperCase().trim())
+        .filter(v=>/^N[1-5]$/.test(v));
+      arr.sort((a,b)=>order.indexOf(a)-order.indexOf(b));
+      srs.levelFilter = arr;
+    }
+    Storage.saveUserData();
+  }
+
+  function levelOfGrammarKey(grammarKey){
+    const key = String(grammarKey || "");
+    const gp = getGrammarPoint(key);
+    if (gp && gp.level) return String(gp.level).toUpperCase();
+    const m = key.match(/^(N[1-5])[_-]/i);
+    if (m) return String(m[1]).toUpperCase();
+    const m2 = key.match(/^(N[1-5])$/i);
+    if (m2) return String(m2[1]).toUpperCase();
+    return "";
+  }
+
+  function passesSrsLevelFilter(grammarKey, filterSet){
+    const set = filterSet || getSrsLevelFilterSet();
+    if (!set || set.size === 0) return true;
+    const lvl = levelOfGrammarKey(grammarKey);
+    if (!lvl) return false;
+    return set.has(lvl);
+  }
+
+  function formatSrsLevelFilterLabel(filterSet){
+    const set = filterSet || getSrsLevelFilterSet();
+    if (!set || set.size === 0) return "All levels";
+    const order = Array.isArray(CONST.LEVEL_ORDER) && CONST.LEVEL_ORDER.length
+      ? CONST.LEVEL_ORDER
+      : ["N5","N4","N3","N2","N1"];
+    const arr = Array.from(set);
+    arr.sort((a,b)=>order.indexOf(a)-order.indexOf(b));
+    return arr.join(", ");
+  }
+
+  function countActiveSrsKeys(filterSet){
+    const srs = ensureSrsConfig();
+    const keys = Array.isArray(srs.grammarKeys) ? srs.grammarKeys : [];
+    const set = filterSet;
+    let count = 0;
+    keys.forEach(k=>{
+      if (set && set.size > 0 && !passesSrsLevelFilter(k, set)) return;
+      const card = getCard(k);
+      if (isRetiredCard(card, srs)) return;
+      count += 1;
+    });
+    return count;
+  }
+
+  function updateSrsLevelFilterUI(){
+    if (!statsLevelFilterBtns || !statsLevelFilterBtns.length) return;
+
+    // Reset all
+    statsLevelFilterBtns.forEach(b=>b.classList.remove("active"));
+
+    const set = getSrsLevelFilterSet();
+    const isAll = (!set || set.size === 0);
+
+    const allBtn = statsLevelFilterBtns.find(b => (b.dataset.srslevel||"").toLowerCase() === "all") || null;
+
+    if (isAll){
+      if (allBtn) allBtn.classList.add("active");
+      statsLevelFilterBtns.forEach(b=>{
+        const raw = (b.dataset.srslevel||"").toLowerCase();
+        if (raw !== "all") b.classList.add("active");
+      });
+      return;
+    }
+
+    statsLevelFilterBtns.forEach(b=>{
+      const lvl = String(b.dataset.srslevel || "").toUpperCase();
+      if (!lvl || lvl === "ALL") return;
+      b.classList.toggle("active", set.has(lvl));
+    });
+  }
+
 
 
   function getCard(grammarKey){
@@ -355,6 +464,7 @@ return srs;
   function buildDeck(){
     const srs = ensureSrsConfig();
     const keys = Array.isArray(srs.grammarKeys) ? srs.grammarKeys : [];
+    const levelSet = getSrsLevelFilterSet();
     deck = [];
     wrongCount = 0;
     rightCount = 0;
@@ -370,6 +480,7 @@ return srs;
     const sourceKeys = [];
     if (sessionType === "new"){
       keys.forEach(grammarKey=>{
+        if (!passesSrsLevelFilter(grammarKey, levelSet)) return;
         const card = getCard(grammarKey);
         if (isRetiredCard(card, srs)) return;
         const reps = Number(card.reps || 0);
@@ -382,6 +493,7 @@ return srs;
       const nowMinutes = now.getHours() * 60 + now.getMinutes();
 
       keys.forEach(grammarKey=>{
+        if (!passesSrsLevelFilter(grammarKey, levelSet)) return;
         const card = getCard(grammarKey);
         if (isRetiredCard(card, srs)) return;
         const dueYmd = card.due || today;
@@ -1383,9 +1495,10 @@ syncShowBackOnRightBtn();
   };
 
 
-  function buildForecast(days=7){
+  function buildForecast(days=7, filterSet=null){
   const srs = ensureSrsConfig();
   const keys = Array.isArray(srs.grammarKeys) ? srs.grammarKeys : [];
+  const levelSet = filterSet || getSrsLevelFilterSet();
   const today = todayYmd();
   const todayDate = Utils.ymdToDate(today);
 
@@ -1406,9 +1519,11 @@ syncShowBackOnRightBtn();
   const now = new Date();
   const nowMinutes = now.getHours() * 60 + now.getMinutes();
 
+  let totalActive = 0;
   let newCount = 0;
 
   keys.forEach((grammarKey)=>{
+    if (levelSet && levelSet.size > 0 && !passesSrsLevelFilter(grammarKey, levelSet)) return;
     const card = getCard(grammarKey);
 
     // Retired cards are treated as completed and do not appear in reviews.
@@ -1416,6 +1531,8 @@ syncShowBackOnRightBtn();
     if (isRetiredCard(card, srs)){
       return;
     }
+
+    totalActive += 1;
 
     const reps = card && typeof card.reps === "number" ? card.reps : 0;
     const hasHistory = !!(card && (reps > 0 || card.last || card.started));
@@ -1472,7 +1589,6 @@ syncShowBackOnRightBtn();
     }
   });
 
-  const totalActive = keys.length;
   let reviewCount = 0;
   if (buckets.length){
     const todayBucket = buckets[0];
@@ -1606,9 +1722,11 @@ syncShowBackOnRightBtn();
   function pullDayToMidnight(ymd){
     const srs = ensureSrsConfig();
     const keys = Array.isArray(srs.grammarKeys) ? srs.grammarKeys : [];
+    const filterSet = getSrsLevelFilterSet();
     if (!keys.length || !ymd) return;
 
     keys.forEach(grammarKey=>{
+      if (filterSet && filterSet.size > 0 && !passesSrsLevelFilter(grammarKey, filterSet)) return;
       const card = getCard(grammarKey);
       if (!card || !card.due) return;
       if (card.due !== ymd) return;
@@ -1626,7 +1744,11 @@ syncShowBackOnRightBtn();
 
   function openStatsModal(){
     if (!statsBackdropEl || !statsSummaryEl || !statsGraphEl) return;
-    const data = buildForecast(180);
+    updateSrsLevelFilterUI();
+    const filterSet = getSrsLevelFilterSet();
+    const allActive = countActiveSrsKeys(null);
+
+    const data = buildForecast(180, filterSet);
     const totalActive = data.totalActive;
     const newCount = data.newCount;
     const reviewCount = data.reviewCount;
@@ -1637,10 +1759,17 @@ syncShowBackOnRightBtn();
     const weekGroups = buildForecastWeekGroups(laterDays);
 
 
-    if (!totalActive){
+    if (!allActive){
       statsSummaryEl.textContent = "No SRS items yet. Use the ＋ buttons next to grammar points to add them to SRS.";
+    } else if (filterSet && filterSet.size > 0){
+      const label = formatSrsLevelFilterLabel(filterSet);
+      if (!totalActive){
+        statsSummaryEl.textContent = `No active cards match the current filter (${label}).`;
+      } else {
+        statsSummaryEl.textContent = `Showing ${totalActive} of ${allActive} active grammar points (${label}).`;
+      }
     } else {
-      statsSummaryEl.textContent = `${totalActive} grammar points in SRS.`;
+      statsSummaryEl.textContent = `${allActive} active grammar points in SRS.`;
     }
 
     if (statsNewCountEl) statsNewCountEl.textContent = String(newCount || 0);
@@ -2176,6 +2305,8 @@ function syncShowBackOnRightBtn(){
     statsCloseBtn = document.querySelector("#srsStatsCloseBtn");
     statsSummaryEl = document.querySelector("#srsStatsSummary");
     statsGraphEl = document.querySelector("#srsStatsGraph");
+    statsLevelFilterWrapEl = document.querySelector("#srsLevelFilterWrap");
+    statsLevelFilterBtns = Array.from(document.querySelectorAll("#srsLevelFilters [data-srslevel]"));
     statsNewCountEl = document.querySelector("#srsNewCount");
     statsReviewCountEl = document.querySelector("#srsReviewCount");
     editFsrsBtn = document.querySelector("#srsEditFsrsBtn");
@@ -2214,6 +2345,40 @@ function syncShowBackOnRightBtn(){
     syncActionButtons();
 
     openBtn.addEventListener("click", openStatsModal);
+
+    // JLPT level filter buttons (SRS Overview)
+    if (statsLevelFilterBtns && statsLevelFilterBtns.length){
+      statsLevelFilterBtns.forEach(btn=>{
+        btn.addEventListener("click", ()=>{
+          const raw = (btn.dataset.srslevel || "").toLowerCase();
+          const set = getSrsLevelFilterSet();
+
+          if (raw === "all"){
+            set.clear();
+            saveSrsLevelFilterSet(set);
+            updateSrsLevelFilterUI();
+            if (statsBackdropEl && !statsBackdropEl.hidden) openStatsModal();
+            return;
+          }
+
+          const lvl = (btn.dataset.srslevel || "").toUpperCase();
+          if (!lvl) return;
+
+          if (set.has(lvl)) set.delete(lvl);
+          else set.add(lvl);
+
+          // If user toggles everything off, treat it as ALL
+          if (set.size === 0){
+            set.clear();
+          }
+
+          saveSrsLevelFilterSet(set);
+          updateSrsLevelFilterUI();
+          if (statsBackdropEl && !statsBackdropEl.hidden) openStatsModal();
+        });
+      });
+    }
+
 
     editFsrsBtn?.addEventListener("click", ()=>{
       openFsrsSettingsModal(true);
